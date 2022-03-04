@@ -32,5 +32,6 @@
   <exec_depend>dv_ros_msgs</exec_depend>
   <exec_depend>dv_ros_messaging</exec_depend>
   <exec_depend>dv_ros_capture</exec_depend>
+  <exec_depend>dv_ros_accumulation</exec_depend>
 
 </package>
