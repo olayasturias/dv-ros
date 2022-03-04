@@ -13,23 +13,23 @@ Enable the appropriate iniVation PPA depending on your Ubuntu distribution:
 sudo add-apt-repository ppa:ubuntu-toolchain-r/test
 sudo add-apt-repository ppa:inivation-ppa/inivation-bionic
 sudo apt update
-sudo apt install dv-processing dv-runtime-dev
+sudo apt install dv-processing dv-runtime-dev gcc-10 g++-10
 ```
 
 * For Ubuntu 20.04:
 ```
 sudo add-apt-repository ppa:inivation-ppa/inivation
 sudo apt update
-sudo apt install dv-processing dv-runtime-dev
+sudo apt install dv-processing dv-runtime-dev gcc-10 g++-10
 ```
 
 The project is build using catkin tools, run the following commands from your catkin workspace:
 ```
 # Run in your catkin workspace root directory
 cd src
-git clone https://this_repo
+git clone https://gitlab.com/inivation/dv/dv-ros.git
 cd ..
-catkin build
+catkin build --cmake-args -DCMAKE_C_COMPILER=gcc-10 -DCMAKE_CXX_COMPILER=g++-10
 ```
 
 After the build, source your environment to load the information about the new packages, connect your camera
