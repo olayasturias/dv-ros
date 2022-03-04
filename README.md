@@ -32,6 +32,8 @@ cd ..
 catkin build --cmake-args -DCMAKE_C_COMPILER=gcc-10 -DCMAKE_CXX_COMPILER=g++-10
 ```
 
+## Verifying the build
+
 After the build, source your environment to load the information about the new packages, connect your camera
 to the computer and validate the build by running visualization sample:
 ```
@@ -40,6 +42,13 @@ roslaunch dv_ros_visualization event_visualization.launch
 ```
 
 You should see a preview of events coming from the iniVation camera connected to your computer.
+
+## Compatibility
+
+The message types for events are designed to be compatible with the types available in 
+(rpg_dvs_ros)[https://github.com/uzh-rpg/rpg_dvs_ros] repository, so the communication is possible with all nodes 
+developed using those event message types (Event and EventArray). The `capture_node` is designed to be a more general
+node replacing the individual nodes for each type of iniVation camera (`davis_ros_driver`, `dvs_ros_driver`, and `dvxplorer_ros_driver`).
 
 ## Repository structure
 
