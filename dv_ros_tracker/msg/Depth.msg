@@ -1,4 +1,4 @@
 # Timed keypoint to ROS message
 
-int64 timestamp
+time timestamp
 float32 depth

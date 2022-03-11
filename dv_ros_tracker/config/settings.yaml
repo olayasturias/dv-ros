@@ -39,5 +39,3 @@ numIntermediateFrames: 5
 
 ## MotionAware Tracker
 useMotionCompensation: true
-worldFrame: "world"
-cameraFrame: "cam0"

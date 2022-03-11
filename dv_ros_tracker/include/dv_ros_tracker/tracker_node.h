@@ -19,16 +19,11 @@
 #include <atomic>
 #include <geometry_msgs/PoseStamped.h>
 #include <queue>
-#include <sensor_msgs/CameraInfo.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/Imu.h>
-#include <std_msgs/Float32.h>
 #include <thread>
 #include <variant>
 
 namespace dv_tracker_node {
 using TimedKeypointArrayMessage = DV_ROS_MSGS(dv_ros_tracker::TimedKeypointArray);
-using TimedKeypointMessage      = DV_ROS_MSGS(dv_ros_tracker::TimedKeypoint);
 using PoseStampedMsg            = DV_ROS_MSGS(geometry_msgs::PoseStamped);
 
 using TrackData = std::variant<dv::EventStore, dv_ros_msgs::FrameMap, dv::kinematics::Transformationf>;
@@ -65,15 +60,13 @@ private:
 
 	OperationMode mode = OperationMode::EventsOnly;
 
-	bool mMotionCompensation = 0;
-
 	struct TrackerConfig {
-		int32_t fastThreshold         = 30;
-		bool lookbackRejection        = true;
+		int32_t fastThreshold         = 10;
+		bool lookbackRejection        = false;
 		int32_t numIntermediateFrames = 5;
 		int32_t accumulationFramerate = 50;
 		float redetectionThreshold    = 0.75;
-		int32_t maxTracks             = 200;
+		int32_t maxTracks             = 300;
 		int32_t numEvents             = 30000;
 	};
 

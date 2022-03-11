@@ -101,13 +101,13 @@ private:
 	std::thread mClock;
 	boost::recursive_mutex mReaderMutex;
 
-	bool mEnableNoiseFilter                                                  = false;
 	std::unique_ptr<dv::noise::BackgroundActivityNoiseFilter<>> mNoiseFilter = nullptr;
 	void updateNoiseFilter(const bool enable, const int64_t backgroundActivityTime);
 
 	int64_t mImuTimeOffset = 0;
 	std::atomic<int64_t> mCurrentSeek;
 	std::optional<TransformsMessage> mImuToCamTransforms = std::nullopt;
+	dv::kinematics::Transformationf mImuToCamTransform;
 
 	std::unique_ptr<dynamic_reconfigure::Server<dv_ros_capture::DAVISConfig>> davisColorServer    = nullptr;
 	std::unique_ptr<dynamic_reconfigure::Server<dv_ros_capture::DVXplorerConfig>> dvxplorerServer = nullptr;
@@ -150,15 +150,13 @@ private:
 	 */
 	void populateInfoMsg(const dv::camera::CameraGeometry &cameraGeometry);
 
-	dv::kinematics::Transformationf mImuToCamTransform;
-
 	/**
 	 * Convert the imu message frame into the camera frame if the transformation exists.
 	 * @param imu
 	 * @return ROS Imu message in camera reference frame
 	 */
 	[[nodiscard]] inline dv_ros_msgs::ImuMessage transformImuFrame(dv_ros_msgs::ImuMessage &&imu) {
-		if (mParams.imuToCameraFrame && mImuToCamTransforms.has_value()) {
+		if (mParams.transformImuToCameraFrame && mImuToCamTransforms.has_value()) {
 			const Eigen::Vector3<double> resW
 				= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.angular_velocity);
 			imu.angular_velocity.x = resW.x();

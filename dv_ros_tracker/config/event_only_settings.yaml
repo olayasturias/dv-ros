@@ -39,5 +39,3 @@ accumulationFramerate: 100
 
 ## MotionAware Tracker
 # useMotionCompensation: true
-# worldFrame: "world"
-# cameraFrame: "xVIOcam"

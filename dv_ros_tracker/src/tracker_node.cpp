@@ -12,8 +12,6 @@ using namespace std::chrono_literals;
 
 TrackerNode::TrackerNode(ros::NodeHandle &nodeHandle) {
 	// Publishers
-	mTracksPreviewPublisher      = nodeHandle.advertise<dv_ros_msgs::ImageMessage>("preview/image", 10);
-	mTracksEventsFramesPublisher = nodeHandle.advertise<dv_ros_msgs::ImageMessage>("events_preview/image", 10);
 	mTimedKeypointArrayPublisher = nodeHandle.advertise<TimedKeypointArrayMessage>("keypoints", 100);
 
 	// Read the parameters
@@ -35,19 +33,23 @@ TrackerNode::TrackerNode(ros::NodeHandle &nodeHandle) {
 	mTrackingConfig.maxTracks = nodeHandle.param("maxTracks", mTrackingConfig.maxTracks);
 	mTrackingConfig.numEvents = nodeHandle.param("numEvents", mTrackingConfig.numEvents);
 
-	bool useEvents      = nodeHandle.param("useEvents", true);
-	bool useFrames      = nodeHandle.param("useFrames", true);
-	mMotionCompensation = nodeHandle.param("useMotionCompensation", false);
+	bool useEvents          = nodeHandle.param("useEvents", true);
+	bool useFrames          = nodeHandle.param("useFrames", true);
+	bool motionCompensation = nodeHandle.param("useMotionCompensation", false);
 
 	// Define the operation mode
 	if (useEvents && useFrames) {
-		mode = OperationMode::Combined;
+		mode                         = OperationMode::Combined;
+		mTracksPreviewPublisher      = nodeHandle.advertise<dv_ros_msgs::ImageMessage>("preview/image", 10);
+		mTracksEventsFramesPublisher = nodeHandle.advertise<dv_ros_msgs::ImageMessage>("events_preview/image", 10);
 	}
 	else if (useEvents) {
-		mode = OperationMode::EventsOnly;
+		mode                         = OperationMode::EventsOnly;
+		mTracksEventsFramesPublisher = nodeHandle.advertise<dv_ros_msgs::ImageMessage>("events_preview/image", 10);
 	}
 	else if (useFrames) {
-		mode = OperationMode::FramesOnly;
+		mode                    = OperationMode::FramesOnly;
+		mTracksPreviewPublisher = nodeHandle.advertise<dv_ros_msgs::ImageMessage>("preview/image", 10);
 	}
 	else {
 		throw dv::exceptions::RuntimeError(
@@ -65,7 +67,7 @@ TrackerNode::TrackerNode(ros::NodeHandle &nodeHandle) {
 		mEventsArraySubscriber = nodeHandle.subscribe("events", 10, &TrackerNode::eventsArrayCallback, this);
 		ROS_INFO("Subscribing to event stream..");
 	}
-	if (mMotionCompensation) {
+	if (motionCompensation) {
 		mode = static_cast<OperationMode>(static_cast<int>(mode) + 1);
 		ROS_INFO_STREAM("Subscribe to pose and depth messages..");
 		mDepthEstimationSubscriber
@@ -110,10 +112,7 @@ void TrackerNode::poseGTCallback(const PoseStampedMsg::ConstPtr &msgPtr) {
 	}
 	lastTransformTime = timestamp;
 
-	Eigen::Matrix<float, 3, 1> t;
-	t(0, 0) = msgPtr->pose.position.x;
-	t(1, 0) = msgPtr->pose.position.y;
-	t(2, 0) = msgPtr->pose.position.z;
+	Eigen::Vector3f t(msgPtr->pose.position.x, msgPtr->pose.position.y, msgPtr->pose.position.z);
 
 	Eigen::Quaternionf q(
 		msgPtr->pose.orientation.w, msgPtr->pose.orientation.x, msgPtr->pose.orientation.y, msgPtr->pose.orientation.z);
@@ -126,8 +125,9 @@ void TrackerNode::depthEstimationCallback(const dv_ros_tracker::Depth::ConstPtr 
 	if (msgPtr == nullptr || tracker == nullptr) {
 		return;
 	}
+
 	mDepthEstimation = msgPtr->depth;
-	auto timestamp   = msgPtr->timestamp;
+	auto timestamp   = dv_ros_msgs::toDvTime(msgPtr->timestamp);
 	switch (mode) {
 		case OperationMode::EventsOnlyCompensated:
 			dynamic_cast<dvf::EventFeatureLKTracker<dv::kinematics::MotionCompensator<>> *>(tracker.get())
@@ -156,7 +156,7 @@ void TrackerNode::cameraInfoCallback(const dv_ros_msgs::CameraInfoMessage::Const
 	for (const auto &d : msgPtr->D) {
 		mCameraCalibration.distortion.push_back(static_cast<float>(d));
 	}
-	mCameraCalibration.distortionModel = "plumb_bob";
+	mCameraCalibration.distortionModel = "radialTangential";
 	mCameraCalibration.focalLength    = cv::Point2f(static_cast<float>(msgPtr->K[0]), static_cast<float>(msgPtr->K[4]));
 	mCameraCalibration.principalPoint = cv::Point2f(static_cast<float>(msgPtr->K[2]), static_cast<float>(msgPtr->K[5]));
 	mCameraInitialized                = true;
@@ -336,7 +336,7 @@ bool TrackerNode::runTracking() {
 
 void TrackerNode::publishEventsPreview(const cv::Mat &background) {
 	if (mTracksEventsFramesPublisher.getNumSubscribers() > 0 && !background.empty()) {
-		mTracksEventsFramesPublisher.publish(dv_ros_msgs::toRosImageMessage(background));
+		mTracksEventsFramesPublisher.publish(dv_ros_msgs::toRosImageMessage(frameTracks.visualize(background)));
 	}
 }
 
@@ -356,8 +356,6 @@ void TrackerNode::manageEventsQueue(const dv::EventStore *events) {
 						  ->getAccumulatedFrame();
 				// publish accumulated image
 				publishEventsPreview(accumulatedImage);
-				// publish the tracks on the accumulated image
-				publishPreview(accumulatedImage);
 			}
 			break;
 		}
@@ -432,7 +430,6 @@ void TrackerNode::manageTransformsQueue(const dv::kinematics::Transformationf *t
 						= dynamic_cast<dvf::EventFeatureLKTracker<dv::kinematics::MotionCompensator<>> *>(tracker.get())
 							  ->getAccumulatedFrame();
 					publishEventsPreview(accumulatedImage);
-					publishPreview(accumulatedImage);
 				}
 			}
 			break;
