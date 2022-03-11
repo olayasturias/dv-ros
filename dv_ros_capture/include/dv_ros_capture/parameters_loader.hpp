@@ -19,6 +19,7 @@ struct Params {
 	std::filesystem::path cameraCalibrationFilePath;
 	std::string cameraFrameName = "camera";
 	std::string imuFrameName    = "imu";
+	bool imuToCameraFrame       = true;
 	bool noiseFiltering         = false;
 	int64_t noiseBATime         = 2000;
 };

@@ -1,6 +1,7 @@
+#include <dv_ros_capture/parameters_loader.hpp>
+
 #include <fmt/core.h>
 
-#include <dv_ros_capture/parameters_loader.hpp>
 #include <iostream>
 #include <string>
 
@@ -18,6 +19,7 @@ ParametersLoader::ParametersLoader(const ros::NodeHandle &nodeHandle) {
 
 	nodeHandle.param<std::string>("cameraFrameName", params_.cameraFrameName, "camera");
 	nodeHandle.param<std::string>("imuFrameName", params_.imuFrameName, "imu");
+	nodeHandle.param<bool>("imuToCameraFrame", params_.imuToCameraFrame, true);
 
 	nodeHandle.param<bool>("noiseFiltering", params_.noiseFiltering, false);
 	int value;
@@ -48,6 +50,7 @@ void ParametersLoader::printConfiguration() {
 	ROS_INFO_STREAM("Frames enabled: " << (params_.frames ? "yes" : "no"));
 	ROS_INFO_STREAM("Events enabled: " << (params_.events ? "yes" : "no"));
 	ROS_INFO_STREAM("Imu enabled: " << (params_.imu ? "yes" : "no"));
+	ROS_INFO_STREAM("Convert IMU to camera frame: " << (params_.imuToCameraFrame ? "yes" : "no"));
 	ROS_INFO_STREAM("Triggers enabled: " << (params_.triggers ? "yes" : "no"));
 	ROS_INFO_STREAM("aedat4FilePath: " << params_.aedat4FilePath);
 	ROS_INFO_STREAM("cameraCalibrationFilePath: " << params_.cameraCalibrationFilePath);

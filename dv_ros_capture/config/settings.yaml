@@ -12,6 +12,8 @@ triggers: true
 cameraFrameName: "camera"
 # IMU reference frame name for publishing IMU extrinsic calibration
 imuFrameName: "imu"
+# if true, the IMU accelerations and velocities are expressed in the camera frame
+imuToCameraFrame: true
 # Path to the camera calibration file
 cameraCalibrationFilePath: ""
 # Path to the aedat4 file, if not specified the first available camera will be read

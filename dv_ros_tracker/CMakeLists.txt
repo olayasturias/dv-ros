@@ -5,6 +5,7 @@ find_package(catkin REQUIRED COMPONENTS
         roscpp
         std_msgs
         sensor_msgs
+        geometry_msgs
         message_generation
         dv_ros_msgs
         dv_ros_messaging
@@ -15,6 +16,7 @@ find_package(dv-processing REQUIRED)
 
 add_message_files(
         FILES
+        Depth.msg
         TimedKeypoint.msg
         TimedKeypointArray.msg
 )
@@ -26,7 +28,7 @@ generate_messages(
 )
 
 catkin_package(
-        CATKIN_DEPENDS message_runtime roscpp std_msgs sensor_msgs dv_ros_msgs dv_ros_messaging dv_ros_capture
+        CATKIN_DEPENDS message_runtime roscpp std_msgs sensor_msgs geometry_msgs dv_ros_msgs dv_ros_messaging dv_ros_capture
 )
 
 include_directories(

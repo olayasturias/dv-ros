@@ -7,29 +7,29 @@
 
 #include <dv_ros_messaging/messaging.hpp>
 
-#include <dv_ros_capture/parameters_loader.hpp>
-#include <dv_ros_capture/reader.hpp>
 #include <dv_ros_capture/DAVISConfig.h>
 #include <dv_ros_capture/DVXplorerConfig.h>
 #include <dv_ros_capture/PlaybackConfig.h>
 #include <dv_ros_capture/SetImuInfoService.h>
+#include <dv_ros_capture/parameters_loader.hpp>
+#include <dv_ros_capture/reader.hpp>
 
 #include <boost/lockfree/spsc_queue.hpp>
 
 #include <ros/ros.h>
 
 #include <dynamic_reconfigure/server.h>
+#include <geometry_msgs/TransformStamped.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/Imu.h>
 #include <tf2_msgs/TFMessage.h>
-#include <geometry_msgs/TransformStamped.h>
 #include <thread>
 
 namespace dv_capture_node {
 using TimestampQueue = boost::lockfree::spsc_queue<int64_t, boost::lockfree::capacity<1000>>;
 
-using TransformMessage = DV_ROS_MSGS(geometry_msgs::TransformStamped);
+using TransformMessage  = DV_ROS_MSGS(geometry_msgs::TransformStamped);
 using TransformsMessage = DV_ROS_MSGS(tf2_msgs::TFMessage);
 
 namespace fs = std::filesystem;
@@ -44,7 +44,7 @@ public:
 	 * @param nodeHandle ros::NodeHandle.
 	 * @param params dv_ros_node::Params read from a configuration file specified in the launch file.
 	 */
-	CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params& params);
+	CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params &params);
 
 	/**
 	 * Stop the running threads.
@@ -101,17 +101,17 @@ private:
 	std::thread mClock;
 	boost::recursive_mutex mReaderMutex;
 
-	bool mEnableNoiseFilter = false;
+	bool mEnableNoiseFilter                                                  = false;
 	std::unique_ptr<dv::noise::BackgroundActivityNoiseFilter<>> mNoiseFilter = nullptr;
 	void updateNoiseFilter(const bool enable, const int64_t backgroundActivityTime);
 
-	int64_t mImuTimeOffset=0;
+	int64_t mImuTimeOffset = 0;
 	std::atomic<int64_t> mCurrentSeek;
 	std::optional<TransformsMessage> mImuToCamTransforms = std::nullopt;
 
 	std::unique_ptr<dynamic_reconfigure::Server<dv_ros_capture::DAVISConfig>> davisColorServer    = nullptr;
 	std::unique_ptr<dynamic_reconfigure::Server<dv_ros_capture::DVXplorerConfig>> dvxplorerServer = nullptr;
-	std::unique_ptr<dynamic_reconfigure::Server<dv_ros_capture::PlaybackConfig>> playbackServer = nullptr;
+	std::unique_ptr<dynamic_reconfigure::Server<dv_ros_capture::PlaybackConfig>> playbackServer   = nullptr;
 
 	/**
 	 * Publish the images and camera info if mFrameBool is True
@@ -149,6 +149,30 @@ private:
 	 * @param cameraCalib camera parameters for the camera info message.
 	 */
 	void populateInfoMsg(const dv::camera::CameraGeometry &cameraGeometry);
+
+	dv::kinematics::Transformationf mImuToCamTransform;
+
+	/**
+	 * Convert the imu message frame into the camera frame if the transformation exists.
+	 * @param imu
+	 * @return ROS Imu message in camera reference frame
+	 */
+	[[nodiscard]] inline dv_ros_msgs::ImuMessage transformImuFrame(dv_ros_msgs::ImuMessage &&imu) {
+		if (mParams.imuToCameraFrame && mImuToCamTransforms.has_value()) {
+			const Eigen::Vector3<double> resW
+				= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.angular_velocity);
+			imu.angular_velocity.x = resW.x();
+			imu.angular_velocity.y = resW.y();
+			imu.angular_velocity.z = resW.z();
+
+			const Eigen::Vector3<double> resV
+				= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.linear_acceleration);
+			imu.linear_acceleration.x = resV.x();
+			imu.linear_acceleration.y = resV.y();
+			imu.linear_acceleration.z = resV.z();
+		}
+		return imu;
+	}
 
 	[[nodiscard]] fs::path saveCalibration() const;
 

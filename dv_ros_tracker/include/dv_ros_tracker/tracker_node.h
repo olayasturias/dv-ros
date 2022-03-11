@@ -5,12 +5,11 @@
 #include <dv-processing/features/event_combined_lk_tracker.hpp>
 #include <dv-processing/features/feature_tracks.hpp>
 #include <dv-processing/features/image_feature_lk_tracker.hpp>
-
-// the messaging wants this (?)
 #include <dv-processing/io/mono_camera_recording.hpp>
 
 #include <dv_ros_messaging/messaging.hpp>
 
+#include <dv_ros_tracker/Depth.h>
 #include <dv_ros_tracker/TimedKeypointArray.h>
 
 #include <boost/lockfree/spsc_queue.hpp>
@@ -18,18 +17,21 @@
 #include <ros/ros.h>
 
 #include <atomic>
+#include <geometry_msgs/PoseStamped.h>
+#include <queue>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/Imu.h>
+#include <std_msgs/Float32.h>
 #include <thread>
 #include <variant>
 
 namespace dv_tracker_node {
 using TimedKeypointArrayMessage = DV_ROS_MSGS(dv_ros_tracker::TimedKeypointArray);
 using TimedKeypointMessage      = DV_ROS_MSGS(dv_ros_tracker::TimedKeypoint);
+using PoseStampedMsg            = DV_ROS_MSGS(geometry_msgs::PoseStamped);
 
-using TrackData = std::variant<dv::EventStore, dv_ros_msgs::FrameMap>;
-
+using TrackData = std::variant<dv::EventStore, dv_ros_msgs::FrameMap, dv::kinematics::Transformationf>;
 using DataQueue = boost::lockfree::spsc_queue<TrackData, boost::lockfree::capacity<100>>;
 
 namespace dvf = dv::features;
@@ -42,6 +44,7 @@ template<typename To, typename From>
 class TrackerNode {
 public:
 	TrackerNode(ros::NodeHandle &nodeHandle);
+
 	~TrackerNode();
 
 	void startTracking();
@@ -51,24 +54,33 @@ public:
 private:
 	void createTracker();
 
-	enum class OperationMode { EventsOnly, FramesOnly, Combined };
+	enum class OperationMode {
+		EventsOnly = 0,
+		EventsOnlyCompensated,
+		FramesOnly,
+		FramesOnlyCompensated,
+		Combined,
+		CombinedCompensated
+	};
 
-	OperationMode mode = OperationMode::Combined;
+	OperationMode mode = OperationMode::EventsOnly;
+
+	bool mMotionCompensation = 0;
 
 	struct TrackerConfig {
-		int32_t fastThreshold         = 10;
-		bool lookbackRejection        = false;
+		int32_t fastThreshold         = 30;
+		bool lookbackRejection        = true;
 		int32_t numIntermediateFrames = 5;
 		int32_t accumulationFramerate = 50;
 		float redetectionThreshold    = 0.75;
-		int32_t maxTracks             = 300;
+		int32_t maxTracks             = 200;
 		int32_t numEvents             = 30000;
 	};
 
 	dvf::FeatureTracks frameTracks;
 
-	TrackerConfig trackingConfig;
-	dvf::ImageFeatureLKTracker::Config lucasKanadeConfig;
+	TrackerConfig mTrackingConfig;
+	dvf::ImageFeatureLKTracker::Config mLucasKanadeConfig;
 
 	std::thread mKeypointsThread;
 	DataQueue mDataQueue;
@@ -76,9 +88,12 @@ private:
 	ros::Subscriber mEventsArraySubscriber;
 	ros::Subscriber mFrameSubscriber;
 	ros::Subscriber mFrameInfoSubscriber;
+	ros::Subscriber mDepthEstimationSubscriber;
+	ros::Subscriber mTfSubscriber;
 
 	ros::Publisher mTimedKeypointArrayPublisher;
 	ros::Publisher mTracksPreviewPublisher;
+	ros::Publisher mTracksEventsFramesPublisher;
 
 	dvf::TrackerBase::UniquePtr tracker = nullptr;
 
@@ -90,11 +105,21 @@ private:
 
 	void cameraInfoCallback(const dv_ros_msgs::CameraInfoMessage::ConstPtr &msgPtr);
 
-	std::atomic<bool> mSpinThread;
+	void depthEstimationCallback(const dv_ros_tracker::Depth::ConstPtr &msgPtr);
+
+	void poseGTCallback(const PoseStampedMsg::ConstPtr &msgPtr);
+
+	float mDepthEstimation = 3.0;
+	std::queue<dv::EventStore> queueEventStore;
+	int64_t lastTransformTime = 0;
+
+	std::atomic<bool> mSpinThread = false;
 
 	dv::camera::calibrations::CameraCalibration mCameraCalibration;
 	bool mCameraInitialized = false;
 	dvf::FeatureTracks mFrameTracks;
+	int64_t mLastEventsTimestamp = 0;
+	std::queue<dv_ros_msgs::FrameMap> queueFrame;
 
 	void assembleTrack();
 
@@ -119,9 +144,23 @@ private:
 
 		return msg;
 	}
+
 	void pushEventToTracker(const dv::EventStore &events);
+
 	void pushFrameToTracker(const dv::Frame &frame);
+
+	void pushTransformToTracker(const dv::kinematics::Transformationf &transform);
+
 	bool runTracking();
+
 	void publishPreview(const cv::Mat &background);
+
+	void publishEventsPreview(const cv::Mat &background);
+
+	void manageEventsQueue(const dv::EventStore *events);
+
+	void manageFramesQueue(const dv_ros_msgs::FrameMap *map);
+
+	void manageTransformsQueue(const dv::kinematics::Transformationf *transform);
 };
 } // namespace dv_tracker_node
