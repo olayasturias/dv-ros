@@ -1,6 +1,4 @@
 <launch>
-    <env name="ROSCONSOLE_FORMAT" value="[${severity}] [${time}] [${node}]: ${message}"/>
-
     <!-- Camera capture node -->
     <node pkg="dv_ros_capture" type="capture_node" name="capture_node" clear_params="true" output="screen"
           required="true"/>
