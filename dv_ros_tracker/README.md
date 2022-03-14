@@ -21,6 +21,6 @@ topic to see the visualization of the tracker performance.
 
 ### Motion Aware Tracker
 
-To enable the motion awareness the parameter `useMotionCompensation` flag is set to *true*. A `PoseStamped` topic
+To enable the motion awareness the parameter `useMotionCompensation` is set to *true*. A `PoseStamped` topic
 indicating the position of the camera must be provided to the node. All the modes listed above support the motion
 compensation feature.
