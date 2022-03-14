@@ -1,4 +1,4 @@
-# DV ROS Motion Aware Tracker
+# DV ROS Tracker
 
 DV ROS Tracker provides a tracker node that can be used to run Lucas-Kanade tracking algorithm on either events or
 images. The tracker supports three main modes of execution:
@@ -18,6 +18,8 @@ operates on different modality of input data, the settings have to be fine-tuned
 The tracker requires a `camera_info` topic and at least on type of supported input data (event or frames). The node
 outputs `TimedKeyPointArray` messages which contain the track locations. Preview images are available in `preview/image`
 topic to see the visualization of the tracker performance.
+
+### Motion Aware Tracker
 
 To enable the motion awareness the parameter `useMotionCompensation` flag is set to *true*. A `PoseStamped` topic
 indicating the position of the camera must be provided to the node. All the modes listed above support the motion
