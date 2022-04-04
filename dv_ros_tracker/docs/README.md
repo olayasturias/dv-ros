@@ -47,4 +47,9 @@ and scene depth used to align the events.
 
 The visual frame's motion compensation is different. The motion prior is used to guess where the tracked feature points
 can land in the next frame. In this way, the search areas for the Lucas Kanade Tracker are defined according to the
-motion information. 
+motion information. As shown in the following image, the red, green, and blue arrows represent the keypoint position
+estimated with the motion information only, the keypoints position detected using the motion prediction information in
+the Lucas Kanade tracker, the Lucas Kanade tracker only without motion prior respectively. The motion prediction plays
+an essential role in the correct keypoints detection, avoiding outliers.
+
+![Compensation pipeline](.media/keypoints_prediction.png "Keypoints prediction.")
