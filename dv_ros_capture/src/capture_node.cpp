@@ -197,9 +197,10 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 }
 
 void CaptureNode::populateInfoMsg(const dv::camera::CameraGeometry &cameraGeometry) {
-	mCameraInfoMsg.width            = cameraGeometry.getResolution().width;
-	mCameraInfoMsg.height           = cameraGeometry.getResolution().height;
-	mCameraInfoMsg.distortion_model = "plumb_bob";
+	mCameraInfoMsg.width  = cameraGeometry.getResolution().width;
+	mCameraInfoMsg.height = cameraGeometry.getResolution().height;
+	mCameraInfoMsg.distortion_model
+		= dv::camera::calibrations::distortionModelToString(cameraGeometry.getDistortionModel());
 
 	auto cx               = cameraGeometry.getCentralPoint().x;
 	auto cy               = cameraGeometry.getCentralPoint().y;
