@@ -279,7 +279,7 @@ fs::path CaptureNode::saveCalibration() const {
 	for (const auto &d : mCameraInfoMsg.D) {
 		calib.distortion.push_back(static_cast<float>(d));
 	}
-	calib.distortionModel = "radialTangential";
+	calib.distortionModel = dv::camera::DistortionModel::RadTan;
 	calib.focalLength = cv::Point2f(static_cast<float>(mCameraInfoMsg.K[0]), static_cast<float>(mCameraInfoMsg.K[4]));
 	calib.principalPoint
 		= cv::Point2f(static_cast<float>(mCameraInfoMsg.K[2]), static_cast<float>(mCameraInfoMsg.K[5]));

@@ -72,7 +72,7 @@ TrackerNode::TrackerNode(ros::NodeHandle &nodeHandle) {
 		ROS_INFO_STREAM("Subscribe to pose and depth messages..");
 		mDepthEstimationSubscriber
 			= nodeHandle.subscribe("depthEstimation", 10, &TrackerNode::depthEstimationCallback, this);
-		mTfSubscriber = nodeHandle.subscribe("pose", 10, &TrackerNode::poseGTCallback, this);
+		mTfSubscriber = nodeHandle.subscribe("pose", 10, &TrackerNode::poseCallback, this);
 		ROS_INFO("Tracker with motion compensation..");
 	}
 
@@ -87,7 +87,6 @@ void TrackerNode::eventsArrayCallback(const dv_ros_msgs::EventArrayMessage::Cons
 	if (msgPtr == nullptr || tracker == nullptr) {
 		return;
 	}
-
 	auto events = dv_ros_msgs::toEventStore(*msgPtr);
 	mDataQueue.push(std::move(events));
 }
@@ -99,7 +98,7 @@ void TrackerNode::frameCallback(const dv_ros_msgs::ImageMessage::ConstPtr &msgPt
 	mDataQueue.push(dv_ros_msgs::FrameMap(msgPtr));
 }
 
-void TrackerNode::poseGTCallback(const PoseStampedMsg::ConstPtr &msgPtr) {
+void TrackerNode::poseCallback(const PoseStampedMsg::ConstPtr &msgPtr) {
 	// if the tracker is not initialized don't care about the messages.
 	if (msgPtr == nullptr || tracker == nullptr) {
 		return;
@@ -156,7 +155,7 @@ void TrackerNode::cameraInfoCallback(const dv_ros_msgs::CameraInfoMessage::Const
 	for (const auto &d : msgPtr->D) {
 		mCameraCalibration.distortion.push_back(static_cast<float>(d));
 	}
-	mCameraCalibration.distortionModel = "radialTangential";
+	mCameraCalibration.distortionModel = dv::camera::calibrations::stringToDistortionModel(msgPtr->distortion_model.c_str());
 	mCameraCalibration.focalLength    = cv::Point2f(static_cast<float>(msgPtr->K[0]), static_cast<float>(msgPtr->K[4]));
 	mCameraCalibration.principalPoint = cv::Point2f(static_cast<float>(msgPtr->K[2]), static_cast<float>(msgPtr->K[5]));
 	mCameraInitialized                = true;

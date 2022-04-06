@@ -100,7 +100,7 @@ private:
 
 	void depthEstimationCallback(const dv_ros_tracker::Depth::ConstPtr &msgPtr);
 
-	void poseGTCallback(const PoseStampedMsg::ConstPtr &msgPtr);
+	void poseCallback(const PoseStampedMsg::ConstPtr &msgPtr);
 
 	float mDepthEstimation = 3.0;
 	std::queue<dv::EventStore> queueEventStore;
