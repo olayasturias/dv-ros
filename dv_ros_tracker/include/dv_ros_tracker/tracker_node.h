@@ -154,7 +154,7 @@ private:
 
 	void manageEventsQueue(const dv::EventStore &events);
 
-	void manageFramesQueue(const dv_ros_msgs::FrameMap *map);
+	void manageFramesQueue(const dv_ros_msgs::FrameMap &map);
 
 	void manageTransformsQueue(const dv::kinematics::Transformationf &transform);
 };

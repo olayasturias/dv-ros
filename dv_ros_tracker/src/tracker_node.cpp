@@ -394,16 +394,16 @@ void TrackerNode::manageEventsQueue(const dv::EventStore &events) {
 	}
 }
 
-void TrackerNode::manageFramesQueue(const dv_ros_msgs::FrameMap *map) {
+void TrackerNode::manageFramesQueue(const dv_ros_msgs::FrameMap &map) {
 	if (mode == OperationMode::FramesOnly) {
 		// Perform tracking and publish the results
-		pushFrameToTracker(map->frame);
+		pushFrameToTracker(map.frame);
 		runTracking();
-		publishPreview(map->frame.image);
+		publishPreview(map.frame.image);
 	}
 	else {
 		// store frame in the queue for synchronization
-		queueFrame.push(*map);
+		queueFrame.push(map);
 	}
 }
 
@@ -475,7 +475,7 @@ void TrackerNode::assembleTrack() {
 			}
 			// read frames
 			else if (const dv_ros_msgs::FrameMap *map = std::get_if<dv_ros_msgs::FrameMap>(&data); map != nullptr) {
-				manageFramesQueue(map);
+				manageFramesQueue(*map);
 			}
 			// read transform
 			else if (const dv::kinematics::Transformationf *transform
