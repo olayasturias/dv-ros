@@ -38,4 +38,4 @@ fastThreshold: 10
 # numIntermediateFrames: 5
 
 ## MotionAware Tracker
-# useMotionCompensation: true
+useMotionCompensation: false

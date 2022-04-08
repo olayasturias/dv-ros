@@ -38,4 +38,4 @@ accumulationFramerate: 100
 numIntermediateFrames: 5
 
 ## MotionAware Tracker
-useMotionCompensation: true
+useMotionCompensation: false

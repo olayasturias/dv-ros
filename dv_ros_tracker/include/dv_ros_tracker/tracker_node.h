@@ -58,7 +58,7 @@ private:
 		CombinedCompensated
 	};
 
-	OperationMode mode = OperationMode::EventsOnly;
+	OperationMode mode = OperationMode::Combined;
 
 	struct TrackerConfig {
 		int32_t fastThreshold         = 10;
@@ -87,6 +87,8 @@ private:
 	ros::Publisher mTimedKeypointArrayPublisher;
 	ros::Publisher mTracksPreviewPublisher;
 	ros::Publisher mTracksEventsFramesPublisher;
+
+	ros::NodeHandle &mNodeHandle;
 
 	dvf::TrackerBase::UniquePtr tracker = nullptr;
 

@@ -10,71 +10,58 @@
 using namespace dv_tracker_node;
 using namespace std::chrono_literals;
 
-TrackerNode::TrackerNode(ros::NodeHandle &nodeHandle) {
+TrackerNode::TrackerNode(ros::NodeHandle &nodeHandle) : mNodeHandle(nodeHandle) {
 	// Publishers
-	mTimedKeypointArrayPublisher = nodeHandle.advertise<TimedKeypointArrayMessage>("keypoints", 100);
+	mTimedKeypointArrayPublisher = mNodeHandle.advertise<TimedKeypointArrayMessage>("keypoints", 100);
 
 	// Read the parameters
 	mLucasKanadeConfig.maskedFeatureDetect
-		= nodeHandle.param("maskedFeatureDetect", mLucasKanadeConfig.maskedFeatureDetect);
-	mLucasKanadeConfig.numPyrLayers = nodeHandle.param("numPyrLayers", mLucasKanadeConfig.numPyrLayers);
-	int windowSize                  = nodeHandle.param("searchWindowSize", mLucasKanadeConfig.searchWindowSize.width);
+		= mNodeHandle.param("maskedFeatureDetect", mLucasKanadeConfig.maskedFeatureDetect);
+	mLucasKanadeConfig.numPyrLayers = mNodeHandle.param("numPyrLayers", mLucasKanadeConfig.numPyrLayers);
+	int windowSize                  = mNodeHandle.param("searchWindowSize", mLucasKanadeConfig.searchWindowSize.width);
 	mLucasKanadeConfig.searchWindowSize = cv::Size(windowSize, windowSize);
 	mLucasKanadeConfig.terminationEpsilon
-		= nodeHandle.param("terminationEpsilon", mLucasKanadeConfig.terminationEpsilon);
+		= mNodeHandle.param("terminationEpsilon", mLucasKanadeConfig.terminationEpsilon);
 	mTrackingConfig.numIntermediateFrames
-		= nodeHandle.param("numIntermediateFrames", mTrackingConfig.numIntermediateFrames);
+		= mNodeHandle.param("numIntermediateFrames", mTrackingConfig.numIntermediateFrames);
 	mTrackingConfig.accumulationFramerate
-		= nodeHandle.param("accumulationFramerate", mTrackingConfig.accumulationFramerate);
-	mTrackingConfig.fastThreshold     = nodeHandle.param("fastThreshold", mTrackingConfig.fastThreshold);
-	mTrackingConfig.lookbackRejection = nodeHandle.param("lookbackRejection", mTrackingConfig.lookbackRejection);
+		= mNodeHandle.param("accumulationFramerate", mTrackingConfig.accumulationFramerate);
+	mTrackingConfig.fastThreshold     = mNodeHandle.param("fastThreshold", mTrackingConfig.fastThreshold);
+	mTrackingConfig.lookbackRejection = mNodeHandle.param("lookbackRejection", mTrackingConfig.lookbackRejection);
 	mTrackingConfig.redetectionThreshold
-		= nodeHandle.param("redetectionThreshold", mTrackingConfig.redetectionThreshold);
-	mTrackingConfig.maxTracks = nodeHandle.param("maxTracks", mTrackingConfig.maxTracks);
-	mTrackingConfig.numEvents = nodeHandle.param("numEvents", mTrackingConfig.numEvents);
+		= mNodeHandle.param("redetectionThreshold", mTrackingConfig.redetectionThreshold);
+	mTrackingConfig.maxTracks = mNodeHandle.param("maxTracks", mTrackingConfig.maxTracks);
+	mTrackingConfig.numEvents = mNodeHandle.param("numEvents", mTrackingConfig.numEvents);
 
-	bool useEvents          = nodeHandle.param("useEvents", true);
-	bool useFrames          = nodeHandle.param("useFrames", true);
-	bool motionCompensation = nodeHandle.param("useMotionCompensation", false);
+	bool useEvents = mNodeHandle.param("useEvents", true);
+	bool useFrames = mNodeHandle.param("useFrames", true);
 
 	// Define the operation mode
 	if (useEvents && useFrames) {
 		mode                         = OperationMode::Combined;
-		mTracksPreviewPublisher      = nodeHandle.advertise<dv_ros_msgs::ImageMessage>("preview/image", 10);
-		mTracksEventsFramesPublisher = nodeHandle.advertise<dv_ros_msgs::ImageMessage>("events_preview/image", 10);
+		mTracksPreviewPublisher      = mNodeHandle.advertise<dv_ros_msgs::ImageMessage>("preview/image", 10);
+		mTracksEventsFramesPublisher = mNodeHandle.advertise<dv_ros_msgs::ImageMessage>("events_preview/image", 10);
 	}
 	else if (useEvents) {
 		mode                         = OperationMode::EventsOnly;
-		mTracksEventsFramesPublisher = nodeHandle.advertise<dv_ros_msgs::ImageMessage>("events_preview/image", 10);
+		mTracksEventsFramesPublisher = mNodeHandle.advertise<dv_ros_msgs::ImageMessage>("events_preview/image", 10);
 	}
 	else if (useFrames) {
 		mode                    = OperationMode::FramesOnly;
-		mTracksPreviewPublisher = nodeHandle.advertise<dv_ros_msgs::ImageMessage>("preview/image", 10);
+		mTracksPreviewPublisher = mNodeHandle.advertise<dv_ros_msgs::ImageMessage>("preview/image", 10);
 	}
 	else {
 		throw dv::exceptions::RuntimeError(
 			"Neither events nor frames are enabled as input, at least one has to be enabled for the tracker!");
 	}
 
-	// Subscribers
-	mFrameInfoSubscriber = nodeHandle.subscribe("camera_info", 10, &TrackerNode::cameraInfoCallback, this);
-
-	if (mode == OperationMode::FramesOnly || mode == OperationMode::Combined) {
-		mFrameSubscriber = nodeHandle.subscribe("image", 10, &TrackerNode::frameCallback, this);
-		ROS_INFO("Subscribing to image stream..");
-	}
-	if (mode == OperationMode::EventsOnly || mode == OperationMode::Combined) {
-		mEventsArraySubscriber = nodeHandle.subscribe("events", 10, &TrackerNode::eventsArrayCallback, this);
-		ROS_INFO("Subscribing to event stream..");
-	}
+	bool motionCompensation = mNodeHandle.param("useMotionCompensation", false);
 	if (motionCompensation) {
 		mode = static_cast<OperationMode>(static_cast<int>(mode) + 1);
-		ROS_INFO_STREAM("Subscribe to pose and depth messages..");
-		mDepthEstimationSubscriber
-			= nodeHandle.subscribe("depthEstimation", 10, &TrackerNode::depthEstimationCallback, this);
-		mTfSubscriber = nodeHandle.subscribe("pose", 10, &TrackerNode::poseCallback, this);
-		ROS_INFO("Tracker with motion compensation..");
 	}
+
+	// Subscriber
+	mFrameInfoSubscriber = mNodeHandle.subscribe("camera_info", 10, &TrackerNode::cameraInfoCallback, this);
 
 	frameTracks.setTrackTimeout(10ms);
 }
@@ -84,7 +71,7 @@ TrackerNode::~TrackerNode() {
 }
 
 void TrackerNode::eventsArrayCallback(const dv_ros_msgs::EventArrayMessage::ConstPtr &msgPtr) {
-	if (msgPtr == nullptr || tracker == nullptr) {
+	if (msgPtr == nullptr) {
 		return;
 	}
 	auto events = dv_ros_msgs::toEventStore(*msgPtr);
@@ -92,7 +79,7 @@ void TrackerNode::eventsArrayCallback(const dv_ros_msgs::EventArrayMessage::Cons
 }
 
 void TrackerNode::frameCallback(const dv_ros_msgs::ImageMessage::ConstPtr &msgPtr) {
-	if (msgPtr == nullptr || tracker == nullptr) {
+	if (msgPtr == nullptr) {
 		return;
 	}
 	mDataQueue.push(dv_ros_msgs::FrameMap(msgPtr));
@@ -100,7 +87,7 @@ void TrackerNode::frameCallback(const dv_ros_msgs::ImageMessage::ConstPtr &msgPt
 
 void TrackerNode::poseCallback(const PoseStampedMsg::ConstPtr &msgPtr) {
 	// if the tracker is not initialized don't care about the messages.
-	if (msgPtr == nullptr || tracker == nullptr) {
+	if (msgPtr == nullptr) {
 		return;
 	}
 
@@ -121,7 +108,7 @@ void TrackerNode::poseCallback(const PoseStampedMsg::ConstPtr &msgPtr) {
 }
 
 void TrackerNode::depthEstimationCallback(const dv_ros_tracker::Depth::ConstPtr &msgPtr) {
-	if (msgPtr == nullptr || tracker == nullptr) {
+	if (msgPtr == nullptr) {
 		return;
 	}
 
@@ -155,13 +142,35 @@ void TrackerNode::cameraInfoCallback(const dv_ros_msgs::CameraInfoMessage::Const
 	for (const auto &d : msgPtr->D) {
 		mCameraCalibration.distortion.push_back(static_cast<float>(d));
 	}
-	mCameraCalibration.distortionModel = dv::camera::calibrations::stringToDistortionModel(msgPtr->distortion_model.c_str());
+	mCameraCalibration.distortionModel
+		= dv::camera::calibrations::stringToDistortionModel(msgPtr->distortion_model.c_str());
 	mCameraCalibration.focalLength    = cv::Point2f(static_cast<float>(msgPtr->K[0]), static_cast<float>(msgPtr->K[4]));
 	mCameraCalibration.principalPoint = cv::Point2f(static_cast<float>(msgPtr->K[2]), static_cast<float>(msgPtr->K[5]));
 	mCameraInitialized                = true;
 
 	// crate the tracker according to the config file and the camera info.
 	createTracker();
+
+	// Subscribers
+	if (mode == OperationMode::FramesOnly || mode == OperationMode::Combined
+		|| mode == OperationMode::FramesOnlyCompensated || mode == OperationMode::CombinedCompensated) {
+		mFrameSubscriber = mNodeHandle.subscribe("image", 10, &TrackerNode::frameCallback, this);
+		ROS_INFO("Subscribing to image stream..");
+	}
+	if (mode == OperationMode::EventsOnly || mode == OperationMode::Combined
+		|| mode == OperationMode::EventsOnlyCompensated || mode == OperationMode::CombinedCompensated) {
+		mEventsArraySubscriber = mNodeHandle.subscribe("events", 10, &TrackerNode::eventsArrayCallback, this);
+		ROS_INFO("Subscribing to event stream..");
+	}
+	if (mode == OperationMode::FramesOnlyCompensated || mode == OperationMode::EventsOnlyCompensated
+		|| mode == OperationMode::CombinedCompensated) {
+		ROS_INFO_STREAM("Subscribe to pose and depth messages..");
+		mDepthEstimationSubscriber
+			= mNodeHandle.subscribe("depthEstimation", 10, &TrackerNode::depthEstimationCallback, this);
+		mTfSubscriber = mNodeHandle.subscribe("pose", 10, &TrackerNode::poseCallback, this);
+		ROS_INFO("Tracker with motion compensation..");
+	}
+
 	// start the tracking thread
 	startTracking();
 }
@@ -258,9 +267,6 @@ void TrackerNode::createTracker() {
 }
 
 void TrackerNode::pushEventToTracker(const dv::EventStore &events) {
-	if (tracker == nullptr) {
-		throw dv::exceptions::RuntimeError("Attempt to use tracker before initialization..");
-	}
 	switch (mode) {
 		case OperationMode::EventsOnly:
 			dynamic_cast<dvf::EventFeatureLKTracker<dv::PixelAccumulator> *>(tracker.get())->accept(events);
@@ -283,9 +289,6 @@ void TrackerNode::pushEventToTracker(const dv::EventStore &events) {
 }
 
 void TrackerNode::pushFrameToTracker(const dv::Frame &frame) {
-	if (tracker == nullptr) {
-		throw dv::exceptions::RuntimeError("Attempt to use tracker before initialization..");
-	}
 	switch (mode) {
 		case OperationMode::FramesOnly:
 			dynamic_cast<dvf::ImageFeatureLKTracker *>(tracker.get())->accept(frame);
