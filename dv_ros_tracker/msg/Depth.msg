@@ -1,4 +1,4 @@
-# Timed keypoint to ROS message
+# Depth Message
 
 time timestamp
 float32 depth
