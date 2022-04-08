@@ -348,10 +348,10 @@ void TrackerNode::publishPreview(const cv::Mat &background) {
 	}
 }
 
-void TrackerNode::manageEventsQueue(const dv::EventStore *events) {
+void TrackerNode::manageEventsQueue(const dv::EventStore &events) {
 	switch (mode) {
 		case OperationMode::EventsOnly: {
-			pushEventToTracker(*events);
+			pushEventToTracker(events);
 			while (runTracking()) {
 				cv::Mat accumulatedImage
 					= dynamic_cast<dvf::EventFeatureLKTracker<dv::PixelAccumulator> *>(tracker.get())
@@ -362,8 +362,8 @@ void TrackerNode::manageEventsQueue(const dv::EventStore *events) {
 			break;
 		}
 		case OperationMode::Combined: {
-			pushEventToTracker(*events);
-			mLastEventsTimestamp = events->getHighestTime();
+			pushEventToTracker(events);
+			mLastEventsTimestamp = events.getHighestTime();
 			// synchronize frames and events
 			while (!queueFrame.empty() && queueFrame.front().frame.timestamp < mLastEventsTimestamp) {
 				pushFrameToTracker(queueFrame.front().frame);
@@ -387,7 +387,7 @@ void TrackerNode::manageEventsQueue(const dv::EventStore *events) {
 		case OperationMode::EventsOnlyCompensated:
 		case OperationMode::CombinedCompensated:
 			// Store events batch in the queue for synchronization
-			queueEventStore.push(*events);
+			queueEventStore.push(events);
 			break;
 		default:
 			break;
@@ -407,8 +407,8 @@ void TrackerNode::manageFramesQueue(const dv_ros_msgs::FrameMap *map) {
 	}
 }
 
-void TrackerNode::manageTransformsQueue(const dv::kinematics::Transformationf *transform) {
-	pushTransformToTracker(*transform);
+void TrackerNode::manageTransformsQueue(const dv::kinematics::Transformationf &transform) {
+	pushTransformToTracker(transform);
 	switch (mode) {
 		case OperationMode::FramesOnlyCompensated: {
 			// Synchronize frames and transforms
@@ -471,7 +471,7 @@ void TrackerNode::assembleTrack() {
 		mDataQueue.consume_all([&](const auto &data) {
 			// read events.
 			if (const dv::EventStore *events = std::get_if<dv::EventStore>(&data); events != nullptr) {
-				manageEventsQueue(events);
+				manageEventsQueue(*events);
 			}
 			// read frames
 			else if (const dv_ros_msgs::FrameMap *map = std::get_if<dv_ros_msgs::FrameMap>(&data); map != nullptr) {
@@ -481,7 +481,7 @@ void TrackerNode::assembleTrack() {
 			else if (const dv::kinematics::Transformationf *transform
 					 = std::get_if<dv::kinematics::Transformationf>(&data);
 					 transform != nullptr) {
-				manageTransformsQueue(transform);
+				manageTransformsQueue(*transform);
 			}
 			else {
 				throw std::runtime_error("Wrong type in queue.");

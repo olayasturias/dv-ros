@@ -152,10 +152,10 @@ private:
 
 	void publishEventsPreview(const cv::Mat &background);
 
-	void manageEventsQueue(const dv::EventStore *events);
+	void manageEventsQueue(const dv::EventStore &events);
 
 	void manageFramesQueue(const dv_ros_msgs::FrameMap *map);
 
-	void manageTransformsQueue(const dv::kinematics::Transformationf *transform);
+	void manageTransformsQueue(const dv::kinematics::Transformationf &transform);
 };
 } // namespace dv_tracker_node
