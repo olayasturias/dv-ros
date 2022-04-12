@@ -93,15 +93,15 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 			msg.header.frame_id = params.imuFrameName;
 			msg.child_frame_id  = params.cameraFrameName;
 
-			const dv::kinematics::Transformationf transform(
+			mImuToCamTransform = dv::kinematics::Transformationf(
 				0, Eigen::Matrix<float, 4, 4, Eigen::RowMajor>(imuCalib->transformationToC0.data()));
 
-			const auto translation      = transform.getTranslation<Eigen::Vector3d>();
+			const auto translation      = mImuToCamTransform.getTranslation<Eigen::Vector3d>();
 			msg.transform.translation.x = translation.x();
 			msg.transform.translation.y = translation.y();
 			msg.transform.translation.z = translation.z();
 
-			const auto rotation      = transform.getQuaternion();
+			const auto rotation      = mImuToCamTransform.getQuaternion();
 			msg.transform.rotation.x = rotation.x();
 			msg.transform.rotation.y = rotation.y();
 			msg.transform.rotation.z = rotation.z();
@@ -150,7 +150,7 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 			// DAVIS camera
 			davisColorServer
 				= std::make_unique<dynamic_reconfigure::Server<dv_ros_capture::DAVISConfig>>(mReaderMutex, nodeHandle);
-			dv_ros_capture::DAVISConfig initialSettings = dv_ros_capture::DAVISConfig::__getDefault__();
+			dv_ros_capture::DAVISConfig initialSettings    = dv_ros_capture::DAVISConfig::__getDefault__();
 			initialSettings.noise_filtering                = mParams.noiseFiltering;
 			initialSettings.noise_background_activity_time = static_cast<int>(mParams.noiseBATime);
 			davisColorServer->updateConfig(initialSettings);
@@ -172,8 +172,8 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 			dvxplorerServer = std::make_unique<dynamic_reconfigure::Server<dv_ros_capture::DVXplorerConfig>>(
 				mReaderMutex, nodeHandle);
 			dv_ros_capture::DVXplorerConfig initialSettings = dv_ros_capture::DVXplorerConfig::__getDefault__();
-			initialSettings.noise_filtering                = mParams.noiseFiltering;
-			initialSettings.noise_background_activity_time = static_cast<int>(mParams.noiseBATime);
+			initialSettings.noise_filtering                 = mParams.noiseFiltering;
+			initialSettings.noise_background_activity_time  = static_cast<int>(mParams.noiseBATime);
 			dvxplorerServer->updateConfig(initialSettings);
 			dvxplorerServer->setCallback([this, &cameraPtr](const dv_ros_capture::DVXplorerConfig &config, uint32_t) {
 				cameraPtr->setDVSGlobalHold(config.global_hold);
@@ -239,6 +239,10 @@ bool CaptureNode::setImuInfo(dv_ros_capture::SetImuInfo::Request &req, dv_ros_ca
 	stampedTransform.child_frame_id    = mParams.cameraFrameName;
 	mImuToCamTransforms->transforms[0] = stampedTransform;
 
+	Eigen::Quaternion<float> q(stampedTransform.transform.rotation.w, stampedTransform.transform.rotation.x,
+		stampedTransform.transform.rotation.y, stampedTransform.transform.rotation.z);
+	mImuToCamTransform = dv::kinematics::Transformationf(0, Eigen::Vector3f::Zero(), q);
+
 	try {
 		auto calibPath     = saveCalibration();
 		rsp.success        = true;
@@ -275,7 +279,7 @@ fs::path CaptureNode::saveCalibration() const {
 	for (const auto &d : mCameraInfoMsg.D) {
 		calib.distortion.push_back(static_cast<float>(d));
 	}
-	calib.distortionModel = "radialTangential";
+	calib.distortionModel = dv::camera::DistortionModel::RadTan;
 	calib.focalLength = cv::Point2f(static_cast<float>(mCameraInfoMsg.K[0]), static_cast<float>(mCameraInfoMsg.K[4]));
 	calib.principalPoint
 		= cv::Point2f(static_cast<float>(mCameraInfoMsg.K[2]), static_cast<float>(mCameraInfoMsg.K[5]));
@@ -468,7 +472,7 @@ void CaptureNode::imuPublisher() {
 				if (mImuPublisher.getNumSubscribers() > 0) {
 					for (auto &imu : *imuData) {
 						imu.timestamp += mImuTimeOffset;
-						mImuPublisher.publish(dv_ros_msgs::toRosImuMessage(imu));
+						mImuPublisher.publish(transformImuFrame(dv_ros_msgs::toRosImuMessage(imu)));
 					}
 				}
 

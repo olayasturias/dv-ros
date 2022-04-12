@@ -17,10 +17,11 @@ struct Params {
 	std::string cameraName;
 	std::filesystem::path aedat4FilePath;
 	std::filesystem::path cameraCalibrationFilePath;
-	std::string cameraFrameName = "camera";
-	std::string imuFrameName    = "imu";
-	bool noiseFiltering         = false;
-	int64_t noiseBATime         = 2000;
+	std::string cameraFrameName    = "camera";
+	std::string imuFrameName       = "imu";
+	bool transformImuToCameraFrame = true;
+	bool noiseFiltering            = false;
+	int64_t noiseBATime            = 2000;
 };
 
 /**

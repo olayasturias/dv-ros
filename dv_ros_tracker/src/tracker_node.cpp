@@ -10,55 +10,59 @@
 using namespace dv_tracker_node;
 using namespace std::chrono_literals;
 
-TrackerNode::TrackerNode(ros::NodeHandle &nodeHandle) {
-	mFrameInfoSubscriber = nodeHandle.subscribe("camera_info", 10, &TrackerNode::cameraInfoCallback, this);
+TrackerNode::TrackerNode(ros::NodeHandle &nodeHandle) : mNodeHandle(nodeHandle) {
+	// Publishers
+	mTimedKeypointArrayPublisher = mNodeHandle.advertise<TimedKeypointArrayMessage>("keypoints", 100);
 
-	mTracksPreviewPublisher      = nodeHandle.advertise<dv_ros_msgs::ImageMessage>("preview/image", 10);
-	mTimedKeypointArrayPublisher = nodeHandle.advertise<TimedKeypointArrayMessage>("keypoints", 100);
+	// Read the parameters
+	mLucasKanadeConfig.maskedFeatureDetect
+		= mNodeHandle.param("maskedFeatureDetect", mLucasKanadeConfig.maskedFeatureDetect);
+	mLucasKanadeConfig.numPyrLayers = mNodeHandle.param("numPyrLayers", mLucasKanadeConfig.numPyrLayers);
+	int windowSize                  = mNodeHandle.param("searchWindowSize", mLucasKanadeConfig.searchWindowSize.width);
+	mLucasKanadeConfig.searchWindowSize = cv::Size(windowSize, windowSize);
+	mLucasKanadeConfig.terminationEpsilon
+		= mNodeHandle.param("terminationEpsilon", mLucasKanadeConfig.terminationEpsilon);
+	mTrackingConfig.numIntermediateFrames
+		= mNodeHandle.param("numIntermediateFrames", mTrackingConfig.numIntermediateFrames);
+	mTrackingConfig.accumulationFramerate
+		= mNodeHandle.param("accumulationFramerate", mTrackingConfig.accumulationFramerate);
+	mTrackingConfig.fastThreshold     = mNodeHandle.param("fastThreshold", mTrackingConfig.fastThreshold);
+	mTrackingConfig.lookbackRejection = mNodeHandle.param("lookbackRejection", mTrackingConfig.lookbackRejection);
+	mTrackingConfig.redetectionThreshold
+		= mNodeHandle.param("redetectionThreshold", mTrackingConfig.redetectionThreshold);
+	mTrackingConfig.maxTracks = mNodeHandle.param("maxTracks", mTrackingConfig.maxTracks);
+	mTrackingConfig.numEvents = mNodeHandle.param("numEvents", mTrackingConfig.numEvents);
 
-	lucasKanadeConfig.maskedFeatureDetect
-		= nodeHandle.param("maskedFeatureDetect", lucasKanadeConfig.maskedFeatureDetect);
-	lucasKanadeConfig.numPyrLayers     = nodeHandle.param("numPyrLayers", lucasKanadeConfig.numPyrLayers);
-	int windowSize                     = nodeHandle.param("searchWindowSize", lucasKanadeConfig.searchWindowSize.width);
-	lucasKanadeConfig.searchWindowSize = cv::Size(windowSize, windowSize);
-	lucasKanadeConfig.terminationEpsilon = nodeHandle.param("terminationEpsilon", lucasKanadeConfig.terminationEpsilon);
+	bool useEvents = mNodeHandle.param("useEvents", true);
+	bool useFrames = mNodeHandle.param("useFrames", true);
 
-	trackingConfig.numIntermediateFrames
-		= nodeHandle.param("numIntermediateFrames", trackingConfig.numIntermediateFrames);
-	trackingConfig.accumulationFramerate
-		= nodeHandle.param("accumulationFramerate", trackingConfig.accumulationFramerate);
-	trackingConfig.fastThreshold        = nodeHandle.param("fastThreshold", trackingConfig.fastThreshold);
-	trackingConfig.lookbackRejection    = nodeHandle.param("lookbackRejection", trackingConfig.lookbackRejection);
-	trackingConfig.redetectionThreshold = nodeHandle.param("redetectionThreshold", trackingConfig.redetectionThreshold);
-	trackingConfig.maxTracks            = nodeHandle.param("maxTracks", trackingConfig.maxTracks);
-	trackingConfig.numEvents            = nodeHandle.param("numEvents", trackingConfig.numEvents);
-
-	bool useEvents = nodeHandle.param("useEvents", true);
-	bool useFrames = nodeHandle.param("useFrames", true);
-
+	// Define the operation mode
 	if (useEvents && useFrames) {
-		mode = OperationMode::Combined;
+		mode                         = OperationMode::Combined;
+		mTracksPreviewPublisher      = mNodeHandle.advertise<dv_ros_msgs::ImageMessage>("preview/image", 10);
+		mTracksEventsFramesPublisher = mNodeHandle.advertise<dv_ros_msgs::ImageMessage>("events_preview/image", 10);
 	}
 	else if (useEvents) {
-		mode = OperationMode::EventsOnly;
+		mode                         = OperationMode::EventsOnly;
+		mTracksEventsFramesPublisher = mNodeHandle.advertise<dv_ros_msgs::ImageMessage>("events_preview/image", 10);
 	}
 	else if (useFrames) {
-		mode = OperationMode::FramesOnly;
+		mode                    = OperationMode::FramesOnly;
+		mTracksPreviewPublisher = mNodeHandle.advertise<dv_ros_msgs::ImageMessage>("preview/image", 10);
 	}
 	else {
 		throw dv::exceptions::RuntimeError(
 			"Neither events nor frames are enabled as input, at least one has to be enabled for the tracker!");
 	}
 
-	if (mode == OperationMode::FramesOnly || mode == OperationMode::Combined) {
-		mFrameSubscriber = nodeHandle.subscribe("image", 10, &TrackerNode::frameCallback, this);
-		ROS_INFO("Subscribing to image stream..");
+	bool motionCompensation = mNodeHandle.param("useMotionCompensation", false);
+	if (motionCompensation) {
+		mode = static_cast<OperationMode>(static_cast<int>(mode) + 1);
+	}
 
-	}
-	if (mode == OperationMode::EventsOnly || mode == OperationMode::Combined) {
-		mEventsArraySubscriber = nodeHandle.subscribe("events", 10, &TrackerNode::eventsArrayCallback, this);
-		ROS_INFO("Subscribing to event stream..");
-	}
+	// Subscriber
+	mFrameInfoSubscriber = mNodeHandle.subscribe("camera_info", 10, &TrackerNode::cameraInfoCallback, this);
+
 	frameTracks.setTrackTimeout(10ms);
 }
 
@@ -70,9 +74,7 @@ void TrackerNode::eventsArrayCallback(const dv_ros_msgs::EventArrayMessage::Cons
 	if (msgPtr == nullptr) {
 		return;
 	}
-
 	auto events = dv_ros_msgs::toEventStore(*msgPtr);
-
 	mDataQueue.push(std::move(events));
 }
 
@@ -81,6 +83,97 @@ void TrackerNode::frameCallback(const dv_ros_msgs::ImageMessage::ConstPtr &msgPt
 		return;
 	}
 	mDataQueue.push(dv_ros_msgs::FrameMap(msgPtr));
+}
+
+void TrackerNode::poseCallback(const PoseStampedMsg::ConstPtr &msgPtr) {
+	// if the tracker is not initialized don't care about the messages.
+	if (msgPtr == nullptr) {
+		return;
+	}
+
+	// if the timestamp is not monotonically increasing return.
+	auto timestamp = dv_ros_msgs::toDvTime(msgPtr->header.stamp);
+	if (lastTransformTime >= timestamp) {
+		return;
+	}
+	lastTransformTime = timestamp;
+
+	Eigen::Vector3f t(msgPtr->pose.position.x, msgPtr->pose.position.y, msgPtr->pose.position.z);
+
+	Eigen::Quaternionf q(
+		msgPtr->pose.orientation.w, msgPtr->pose.orientation.x, msgPtr->pose.orientation.y, msgPtr->pose.orientation.z);
+
+	dv::kinematics::Transformationf T_WC = dv::kinematics::Transformationf(timestamp, t, q);
+	mDataQueue.push(T_WC);
+}
+
+void TrackerNode::depthEstimationCallback(const dv_ros_tracker::Depth::ConstPtr &msgPtr) {
+	if (msgPtr == nullptr) {
+		return;
+	}
+
+	mDepthEstimation = msgPtr->depth;
+	auto timestamp   = dv_ros_msgs::toDvTime(msgPtr->timestamp);
+	switch (mode) {
+		case OperationMode::EventsOnlyCompensated:
+			dynamic_cast<dvf::EventFeatureLKTracker<dv::kinematics::MotionCompensator<>> *>(tracker.get())
+				->accept(dv::measurements::Depth(timestamp, mDepthEstimation));
+			break;
+		case OperationMode::FramesOnlyCompensated:
+			dynamic_cast<dvf::ImageFeatureLKTracker *>(tracker.get())
+				->accept(dv::measurements::Depth(timestamp, mDepthEstimation));
+			break;
+		case OperationMode::CombinedCompensated:
+			dynamic_cast<dvf::EventCombinedLKTracker<dv::kinematics::MotionCompensator<>> *>(tracker.get())
+				->accept(dv::measurements::Depth(timestamp, mDepthEstimation));
+			break;
+		default:
+			break;
+	}
+}
+
+void TrackerNode::cameraInfoCallback(const dv_ros_msgs::CameraInfoMessage::ConstPtr &msgPtr) {
+	if (mCameraInitialized) {
+		return;
+	}
+	// read the camera info
+	mCameraCalibration            = dv::camera::calibrations::CameraCalibration();
+	mCameraCalibration.resolution = cv::Size(static_cast<int>(msgPtr->width), static_cast<int>(msgPtr->height));
+	for (const auto &d : msgPtr->D) {
+		mCameraCalibration.distortion.push_back(static_cast<float>(d));
+	}
+
+	// TODO: dv::camera::calibrations::stringToDistortionModel(msgPtr->distortion_model.c_str());
+	mCameraCalibration.distortionModel = dv::camera::DistortionModel::RadTan;
+	mCameraCalibration.focalLength    = cv::Point2f(static_cast<float>(msgPtr->K[0]), static_cast<float>(msgPtr->K[4]));
+	mCameraCalibration.principalPoint = cv::Point2f(static_cast<float>(msgPtr->K[2]), static_cast<float>(msgPtr->K[5]));
+	mCameraInitialized                = true;
+
+	// crate the tracker according to the config file and the camera info.
+	createTracker();
+
+	// Subscribers
+	if (mode == OperationMode::FramesOnly || mode == OperationMode::Combined
+		|| mode == OperationMode::FramesOnlyCompensated || mode == OperationMode::CombinedCompensated) {
+		mFrameSubscriber = mNodeHandle.subscribe("image", 10, &TrackerNode::frameCallback, this);
+		ROS_INFO("Subscribing to image stream..");
+	}
+	if (mode == OperationMode::EventsOnly || mode == OperationMode::Combined
+		|| mode == OperationMode::EventsOnlyCompensated || mode == OperationMode::CombinedCompensated) {
+		mEventsArraySubscriber = mNodeHandle.subscribe("events", 10, &TrackerNode::eventsArrayCallback, this);
+		ROS_INFO("Subscribing to event stream..");
+	}
+	if (mode == OperationMode::FramesOnlyCompensated || mode == OperationMode::EventsOnlyCompensated
+		|| mode == OperationMode::CombinedCompensated) {
+		ROS_INFO_STREAM("Subscribe to pose and depth messages..");
+		mDepthEstimationSubscriber
+			= mNodeHandle.subscribe("depthEstimation", 10, &TrackerNode::depthEstimationCallback, this);
+		mTfSubscriber = mNodeHandle.subscribe("pose", 10, &TrackerNode::poseCallback, this);
+		ROS_INFO("Tracker with motion compensation..");
+	}
+
+	// start the tracking thread
+	startTracking();
 }
 
 bool TrackerNode::isRunning() const {
@@ -95,37 +188,79 @@ void TrackerNode::startTracking() {
 
 void TrackerNode::createTracker() {
 	auto detector = std::make_unique<dvf::ImagePyrFeatureDetector>(
-		mCameraCalibration.resolution, cv::FastFeatureDetector::create(trackingConfig.fastThreshold));
+		mCameraCalibration.resolution, cv::FastFeatureDetector::create(mTrackingConfig.fastThreshold));
 
 	switch (mode) {
 		case OperationMode::EventsOnly: {
+			ROS_INFO("Constructing Events Only Tracker..");
 			auto eventTracker = dvf::EventFeatureLKTracker<dv::PixelAccumulator>::RegularTracker(
-				mCameraCalibration.resolution, lucasKanadeConfig, nullptr, std::move(detector),
-				std::make_unique<dvf::FeatureCountRedetection>(trackingConfig.redetectionThreshold));
-			eventTracker->setMaxTracks(trackingConfig.maxTracks);
-			eventTracker->setFramerate(trackingConfig.accumulationFramerate);
-			eventTracker->setNumberOfEvents(trackingConfig.numEvents);
-			eventTracker->setLookbackRejection(trackingConfig.lookbackRejection);
+				mCameraCalibration.resolution, mLucasKanadeConfig, nullptr, std::move(detector),
+				std::make_unique<dvf::FeatureCountRedetection>(mTrackingConfig.redetectionThreshold));
+			eventTracker->setMaxTracks(mTrackingConfig.maxTracks);
+			eventTracker->setFramerate(mTrackingConfig.accumulationFramerate);
+			eventTracker->setNumberOfEvents(mTrackingConfig.numEvents);
+			eventTracker->setLookbackRejection(mTrackingConfig.lookbackRejection);
+			tracker = static_unique_ptr_cast<dvf::TrackerBase>(std::move(eventTracker));
+			break;
+		}
+		case OperationMode::EventsOnlyCompensated: {
+			ROS_INFO("Constructing Events with Motion Compensation Tracker..");
+			auto eventTracker = dvf::EventFeatureLKTracker<dv::kinematics::MotionCompensator<>>::MotionAwareTracker(
+				std::make_shared<dv::camera::CameraGeometry>(mCameraCalibration.getCameraGeometry()),
+				mLucasKanadeConfig, nullptr, nullptr, std::move(detector),
+				std::make_unique<dvf::FeatureCountRedetection>(mTrackingConfig.redetectionThreshold));
+
+			eventTracker->setMaxTracks(mTrackingConfig.maxTracks);
+			eventTracker->setFramerate(mTrackingConfig.accumulationFramerate);
+			eventTracker->setNumberOfEvents(mTrackingConfig.numEvents);
+			eventTracker->setLookbackRejection(mTrackingConfig.lookbackRejection);
 			tracker = static_unique_ptr_cast<dvf::TrackerBase>(std::move(eventTracker));
 			break;
 		}
 		case OperationMode::FramesOnly: {
+			ROS_INFO("Constructing Frames Only Tracker..");
 			auto frameTracker = dvf::ImageFeatureLKTracker::RegularTracker(mCameraCalibration.resolution,
-				lucasKanadeConfig, std::move(detector),
-				std::make_unique<dvf::FeatureCountRedetection>(trackingConfig.redetectionThreshold));
-			frameTracker->setMaxTracks(trackingConfig.maxTracks);
-			frameTracker->setLookbackRejection(trackingConfig.lookbackRejection);
+				mLucasKanadeConfig, std::move(detector),
+				std::make_unique<dvf::FeatureCountRedetection>(mTrackingConfig.redetectionThreshold));
+			frameTracker->setMaxTracks(mTrackingConfig.maxTracks);
+			frameTracker->setLookbackRejection(mTrackingConfig.lookbackRejection);
+			tracker = static_unique_ptr_cast<dvf::TrackerBase>(std::move(frameTracker));
+			break;
+		}
+		case OperationMode::FramesOnlyCompensated: {
+			ROS_INFO("Constructing Frames with Motion Compensation Tracker..");
+			auto frameTracker = dvf::ImageFeatureLKTracker::MotionAwareTracker(
+				std::make_shared<dv::camera::CameraGeometry>(mCameraCalibration.getCameraGeometry()),
+				mLucasKanadeConfig, nullptr, std::move(detector),
+				std::make_unique<dvf::FeatureCountRedetection>(mTrackingConfig.redetectionThreshold));
+			frameTracker->setMaxTracks(mTrackingConfig.maxTracks);
+			frameTracker->setLookbackRejection(mTrackingConfig.lookbackRejection);
 			tracker = static_unique_ptr_cast<dvf::TrackerBase>(std::move(frameTracker));
 			break;
 		}
 
 		case OperationMode::Combined: {
+			ROS_INFO("Constructing Combined Tracker..");
 			auto combinedTracker = dvf::EventCombinedLKTracker<dv::PixelAccumulator>::RegularTracker(
-				mCameraCalibration.resolution, lucasKanadeConfig, nullptr, std::move(detector),
-				std::make_unique<dvf::FeatureCountRedetection>(trackingConfig.redetectionThreshold));
-			combinedTracker->setMaxTracks(trackingConfig.maxTracks);
-			combinedTracker->setNumIntermediateFrames(trackingConfig.numIntermediateFrames);
-			combinedTracker->setLookbackRejection(trackingConfig.lookbackRejection);
+				mCameraCalibration.resolution, mLucasKanadeConfig, nullptr, std::move(detector),
+				std::make_unique<dvf::FeatureCountRedetection>(mTrackingConfig.redetectionThreshold));
+			combinedTracker->setMaxTracks(mTrackingConfig.maxTracks);
+			combinedTracker->setNumberOfEvents(mTrackingConfig.numEvents);
+			combinedTracker->setNumIntermediateFrames(mTrackingConfig.numIntermediateFrames);
+			combinedTracker->setLookbackRejection(mTrackingConfig.lookbackRejection);
+			tracker = static_unique_ptr_cast<dvf::TrackerBase>(std::move(combinedTracker));
+			break;
+		}
+		case OperationMode::CombinedCompensated: {
+			ROS_INFO("Constructing Combined with Motion Compensation Tracker..");
+			auto combinedTracker = dvf::EventCombinedLKTracker<dv::kinematics::MotionCompensator<>>::MotionAwareTracker(
+				std::make_shared<dv::camera::CameraGeometry>(mCameraCalibration.getCameraGeometry()),
+				mLucasKanadeConfig, nullptr, nullptr, std::move(detector),
+				std::make_unique<dvf::FeatureCountRedetection>(mTrackingConfig.redetectionThreshold));
+			combinedTracker->setMaxTracks(mTrackingConfig.maxTracks);
+			combinedTracker->setNumberOfEvents(mTrackingConfig.numEvents);
+			combinedTracker->setNumIntermediateFrames(mTrackingConfig.numIntermediateFrames);
+			combinedTracker->setLookbackRejection(mTrackingConfig.lookbackRejection);
 			tracker = static_unique_ptr_cast<dvf::TrackerBase>(std::move(combinedTracker));
 			break;
 		}
@@ -137,8 +272,16 @@ void TrackerNode::pushEventToTracker(const dv::EventStore &events) {
 		case OperationMode::EventsOnly:
 			dynamic_cast<dvf::EventFeatureLKTracker<dv::PixelAccumulator> *>(tracker.get())->accept(events);
 			break;
+		case OperationMode::EventsOnlyCompensated:
+			dynamic_cast<dvf::EventFeatureLKTracker<dv::kinematics::MotionCompensator<>> *>(tracker.get())
+				->accept(events);
+			break;
 		case OperationMode::Combined:
 			dynamic_cast<dvf::EventCombinedLKTracker<dv::PixelAccumulator> *>(tracker.get())->accept(events);
+			break;
+		case OperationMode::CombinedCompensated:
+			dynamic_cast<dvf::EventCombinedLKTracker<dv::kinematics::MotionCompensator<>> *>(tracker.get())
+				->accept(events);
 			break;
 		default:
 			// Noop,
@@ -151,11 +294,36 @@ void TrackerNode::pushFrameToTracker(const dv::Frame &frame) {
 		case OperationMode::FramesOnly:
 			dynamic_cast<dvf::ImageFeatureLKTracker *>(tracker.get())->accept(frame);
 			break;
+		case OperationMode::FramesOnlyCompensated:
+			dynamic_cast<dvf::ImageFeatureLKTracker *>(tracker.get())->accept(frame);
+			break;
 		case OperationMode::Combined:
 			dynamic_cast<dvf::EventCombinedLKTracker<dv::PixelAccumulator> *>(tracker.get())->accept(frame);
 			break;
+		case OperationMode::CombinedCompensated:
+			dynamic_cast<dvf::EventCombinedLKTracker<dv::kinematics::MotionCompensator<>> *>(tracker.get())
+				->accept(frame);
+			break;
 		default:
 			// Noop
+			break;
+	}
+}
+
+void TrackerNode::pushTransformToTracker(const dv::kinematics::Transformationf &transform) {
+	switch (mode) {
+		case OperationMode::EventsOnlyCompensated:
+			dynamic_cast<dvf::EventFeatureLKTracker<dv::kinematics::MotionCompensator<>> *>(tracker.get())
+				->accept(transform);
+			break;
+		case OperationMode::FramesOnlyCompensated:
+			dynamic_cast<dvf::ImageFeatureLKTracker *>(tracker.get())->accept(transform);
+			break;
+		case OperationMode::CombinedCompensated:
+			dynamic_cast<dvf::EventCombinedLKTracker<dv::kinematics::MotionCompensator<>> *>(tracker.get())
+				->accept(transform);
+			break;
+		default:
 			break;
 	}
 }
@@ -169,58 +337,152 @@ bool TrackerNode::runTracking() {
 	return false;
 }
 
-void TrackerNode::publishPreview(const cv::Mat& background) {
-	if (mTracksPreviewPublisher.getNumSubscribers() > 0) {
-		mTracksPreviewPublisher.publish(
-			dv_ros_msgs::toRosImageMessage(frameTracks.visualize(background)));
+void TrackerNode::publishEventsPreview(const cv::Mat &background) {
+	if (mTracksEventsFramesPublisher.getNumSubscribers() > 0 && !background.empty()) {
+		mTracksEventsFramesPublisher.publish(dv_ros_msgs::toRosImageMessage(frameTracks.visualize(background)));
+	}
+}
+
+void TrackerNode::publishPreview(const cv::Mat &background) {
+	if (mTracksPreviewPublisher.getNumSubscribers() > 0 && !background.empty()) {
+		mTracksPreviewPublisher.publish(dv_ros_msgs::toRosImageMessage(frameTracks.visualize(background)));
+	}
+}
+
+void TrackerNode::manageEventsQueue(const dv::EventStore &events) {
+	switch (mode) {
+		case OperationMode::EventsOnly: {
+			pushEventToTracker(events);
+			while (runTracking()) {
+				cv::Mat accumulatedImage
+					= dynamic_cast<dvf::EventFeatureLKTracker<dv::PixelAccumulator> *>(tracker.get())
+						  ->getAccumulatedFrame();
+				// publish accumulated image
+				publishEventsPreview(accumulatedImage);
+			}
+			break;
+		}
+		case OperationMode::Combined: {
+			pushEventToTracker(events);
+			mLastEventsTimestamp = events.getHighestTime();
+			// synchronize frames and events
+			while (!queueFrame.empty() && queueFrame.front().frame.timestamp < mLastEventsTimestamp) {
+				pushFrameToTracker(queueFrame.front().frame);
+				runTracking();
+				auto frames = dynamic_cast<dvf::EventCombinedLKTracker<dv::PixelAccumulator> *>(tracker.get())
+								  ->getAccumulatedFrames();
+				if (!frames.empty()) {
+					cv::Mat accumulatedImage = frames.back().pyramid.front();
+					// publish accumulated image
+					publishEventsPreview(accumulatedImage);
+				}
+				// publish the tracks on the frame
+				publishPreview(queueFrame.front().frame.image);
+
+				// remove the used data from the queue
+				queueFrame.pop();
+			}
+			break;
+		}
+			// same behaviour for the two cases
+		case OperationMode::EventsOnlyCompensated:
+		case OperationMode::CombinedCompensated:
+			// Store events batch in the queue for synchronization
+			queueEventStore.push(events);
+			break;
+		default:
+			break;
+	}
+}
+
+void TrackerNode::manageFramesQueue(const dv_ros_msgs::FrameMap &map) {
+	if (mode == OperationMode::FramesOnly) {
+		// Perform tracking and publish the results
+		pushFrameToTracker(map.frame);
+		runTracking();
+		publishPreview(map.frame.image);
+	}
+	else {
+		// store frame in the queue for synchronization
+		queueFrame.push(map);
+	}
+}
+
+void TrackerNode::manageTransformsQueue(const dv::kinematics::Transformationf &transform) {
+	pushTransformToTracker(transform);
+	switch (mode) {
+		case OperationMode::FramesOnlyCompensated: {
+			// Synchronize frames and transforms
+			while (!queueFrame.empty() && queueFrame.front().frame.timestamp < lastTransformTime) {
+				pushFrameToTracker(queueFrame.front().frame);
+				runTracking();
+				publishPreview(queueFrame.front().frame.image);
+
+				queueFrame.pop();
+			}
+			break;
+		}
+		case OperationMode::EventsOnlyCompensated: {
+			// Synchronize events and transforms
+			while (!queueEventStore.empty() && queueEventStore.front().getHighestTime() < lastTransformTime) {
+				pushEventToTracker(queueEventStore.front());
+				mLastEventsTimestamp = queueEventStore.front().getHighestTime();
+				queueEventStore.pop();
+				while (runTracking()) {
+					cv::Mat accumulatedImage
+						= dynamic_cast<dvf::EventFeatureLKTracker<dv::kinematics::MotionCompensator<>> *>(tracker.get())
+							  ->getAccumulatedFrame();
+					publishEventsPreview(accumulatedImage);
+				}
+			}
+			break;
+		}
+		case OperationMode::CombinedCompensated: {
+			// Synchronize events and transforms
+			while (!queueEventStore.empty() && queueEventStore.front().getHighestTime() < lastTransformTime) {
+				pushEventToTracker(queueEventStore.front());
+				mLastEventsTimestamp = queueEventStore.front().getHighestTime();
+				queueEventStore.pop();
+				// Synchronize frames and transforms
+				while (!queueFrame.empty() && queueFrame.front().frame.timestamp < mLastEventsTimestamp) {
+					pushFrameToTracker(queueFrame.front().frame);
+					// perform tracking and publish the results
+					runTracking();
+					auto tmpTracker = dynamic_cast<dvf::EventCombinedLKTracker<dv::kinematics::MotionCompensator<>> *>(
+						tracker.get());
+					auto frames = tmpTracker->getAccumulatedFrames();
+					if (!frames.empty()) {
+						cv::Mat accumulatedImage = frames.back().pyramid.front();
+						publishEventsPreview(accumulatedImage);
+					}
+					publishPreview(queueFrame.front().frame.image);
+
+					queueFrame.pop();
+				}
+			}
+			break;
+		}
+		default:
+			break;
 	}
 }
 
 void TrackerNode::assembleTrack() {
-	cv::Mat framePreview(mCameraCalibration.resolution.width, mCameraCalibration.resolution.height, CV_8UC3);
-
-	int64_t lastEventsTimestamp = 0;
-	std::vector<dv_ros_msgs::FrameMap> frameList;
-
-	createTracker();
-
 	while (mSpinThread) {
 		mDataQueue.consume_all([&](const auto &data) {
+			// read events.
 			if (const dv::EventStore *events = std::get_if<dv::EventStore>(&data); events != nullptr) {
-				lastEventsTimestamp = events->getHighestTime();
-				pushEventToTracker(*events);
-				if (mode == OperationMode::EventsOnly) {
-					while (runTracking()) {
-						cv::Mat accumulatedImage
-							= dynamic_cast<dvf::EventFeatureLKTracker<dv::PixelAccumulator> *>(tracker.get())
-								  ->getAccumulatedFrame();
-						publishPreview(accumulatedImage);
-					}
-				}
-				else if (mode == OperationMode::Combined) {
-					auto it = frameList.begin();
-					while (it != frameList.end()) {
-						if (it->frame.timestamp < lastEventsTimestamp) {
-							pushFrameToTracker(it->frame);
-							runTracking();
-							it = frameList.erase(it);
-						}
-						else {
-							it++;
-						}
-					}
-				}
+				manageEventsQueue(*events);
 			}
+			// read frames
 			else if (const dv_ros_msgs::FrameMap *map = std::get_if<dv_ros_msgs::FrameMap>(&data); map != nullptr) {
-				if (mode == OperationMode::FramesOnly) {
-					pushFrameToTracker(map->frame);
-					runTracking();
-					publishPreview(map->frame.image);
-				}
-				else {
-					frameList.push_back(*map);
-					publishPreview(map->frame.image);
-				}
+				manageFramesQueue(*map);
+			}
+			// read transform
+			else if (const dv::kinematics::Transformationf *transform
+					 = std::get_if<dv::kinematics::Transformationf>(&data);
+					 transform != nullptr) {
+				manageTransformsQueue(*transform);
 			}
 			else {
 				throw std::runtime_error("Wrong type in queue.");
@@ -228,24 +490,6 @@ void TrackerNode::assembleTrack() {
 		});
 		std::this_thread::sleep_for(100us);
 	}
-}
-
-void TrackerNode::cameraInfoCallback(const dv_ros_msgs::CameraInfoMessage::ConstPtr &msgPtr) {
-	if (mCameraInitialized) {
-		return;
-	}
-
-	mCameraCalibration            = dv::camera::calibrations::CameraCalibration();
-	mCameraCalibration.resolution = cv::Size(msgPtr->width, msgPtr->height);
-	for (const auto &d : msgPtr->D) {
-		mCameraCalibration.distortion.push_back(d);
-	}
-	mCameraCalibration.distortionModel = "plumb_bob";
-	mCameraCalibration.focalLength     = cv::Point2f(msgPtr->K[0], msgPtr->K[4]);
-	mCameraCalibration.principalPoint  = cv::Point2f(msgPtr->K[2], msgPtr->K[5]);
-	mCameraInitialized                 = true;
-
-	startTracking();
 }
 
 void TrackerNode::stop() {

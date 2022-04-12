@@ -42,7 +42,7 @@ find_package(dv-processing 1.3.0 REQUIRED)
 add_subdirectory(thirdparty/CLI11)
 
 catkin_package(
-        CATKIN_DEPENDS rospy std_msgs sensor_msgs dv_ros_msgs rosbag
+        CATKIN_DEPENDS rospy std_msgs sensor_msgs dv_ros_msgs dv_ros_messaging rosbag
 )
 
 include_directories(

@@ -37,3 +37,5 @@ accumulationFramerate: 100
 # controls how many frames are accumulated between two image frames
 numIntermediateFrames: 5
 
+## MotionAware Tracker
+useMotionCompensation: false

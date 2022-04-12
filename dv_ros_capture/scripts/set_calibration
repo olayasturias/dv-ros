@@ -28,7 +28,7 @@ def save_calibration(path, camera_namespace):
                                  cam_calibration.focalLength[1], cam_calibration.focalLength[1], 0, 0, 0, 1.0, 0]
         request.camera_info.width = cam_calibration.resolution[0]
         request.camera_info.height = cam_calibration.resolution[1]
-        if cam_calibration.distortionModel == "radialTangential":
+        if cam_calibration.distortionModel == dv.camera.DistortionModel.RadTan:
             request.camera_info.distortion_model = "plumb_bob"
             if len(request.camera_info.D) < 5:
                 request.camera_info.D.append(0.0)
