@@ -142,8 +142,9 @@ void TrackerNode::cameraInfoCallback(const dv_ros_msgs::CameraInfoMessage::Const
 	for (const auto &d : msgPtr->D) {
 		mCameraCalibration.distortion.push_back(static_cast<float>(d));
 	}
-	mCameraCalibration.distortionModel
-		= dv::camera::calibrations::stringToDistortionModel(msgPtr->distortion_model.c_str());
+
+	// TODO: dv::camera::calibrations::stringToDistortionModel(msgPtr->distortion_model.c_str());
+	mCameraCalibration.distortionModel = dv::camera::DistortionModel::RadTan;
 	mCameraCalibration.focalLength    = cv::Point2f(static_cast<float>(msgPtr->K[0]), static_cast<float>(msgPtr->K[4]));
 	mCameraCalibration.principalPoint = cv::Point2f(static_cast<float>(msgPtr->K[2]), static_cast<float>(msgPtr->K[5]));
 	mCameraInitialized                = true;

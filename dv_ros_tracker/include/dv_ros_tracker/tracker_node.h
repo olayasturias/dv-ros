@@ -127,8 +127,8 @@ private:
 
 		for (const auto &kp : keypoints) {
 			auto &k     = msg.keypoints.emplace_back();
-			k.x         = kp.pt.x;
-			k.y         = kp.pt.y;
+			k.x         = kp.pt.x();
+			k.y         = kp.pt.y();
 			k.size      = kp.size;
 			k.angle     = kp.angle;
 			k.response  = kp.response;
