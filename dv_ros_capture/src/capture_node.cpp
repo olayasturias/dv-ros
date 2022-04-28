@@ -23,7 +23,7 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 	else {
 		mReader = dv_ros_node::Reader(mParams.aedat4FilePath, mParams.cameraName);
 	}
-
+	startupTime = ros::Time::now();
 	if (mParams.frames && !mReader.isFrameStreamAvailable()) {
 		mParams.frames = false;
 		ROS_WARN("Frame stream is not available!");
@@ -39,6 +39,31 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 	if (mParams.triggers && !mReader.isTriggerStreamAvailable()) {
 		mParams.triggers = false;
 		ROS_WARN("Trigger data stream is not available!");
+	}
+
+	const auto &liveCapture = mReader.getCameraCapturePtr();
+	// If the pointer is valid - the reader is handling a live camera
+	if (liveCapture) {
+		mDiscoveryPublisher = nodeHandle.advertise<DiscoveryMessage>("/dvs/discovery", 10);
+		mDiscoveryThread    = std::make_unique<std::thread>([this, &liveCapture] {
+            DiscoveryMessage message;
+            message.isMaster         = liveCapture->isMasterCamera();
+            message.name             = liveCapture->getCameraName();
+            message.startupTime      = startupTime;
+            message.publishingEvents = mParams.events;
+            message.publishingFrames = mParams.frames;
+            message.publishingImu    = mParams.imu;
+            message.publishingEvents = mParams.events;
+
+            // 5 Hz is enough
+            ros::Rate rate(5.0);
+            while (mSpinThread) {
+                message.header.seq++;
+                message.header.stamp = ros::Time::now();
+                mDiscoveryPublisher.publish(message);
+                rate.sleep();
+            }
+        });
 	}
 
 	if (mParams.frames) {
@@ -427,6 +452,9 @@ void CaptureNode::stop() {
 	}
 	if (mCameraInfoThread != nullptr) {
 		mCameraInfoThread->join();
+	}
+	if (mDiscoveryThread != nullptr) {
+		mDiscoveryThread->join();
 	}
 }
 

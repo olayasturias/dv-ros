@@ -22,6 +22,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
         FILES
         ImuInfo.msg
+        CameraDiscovery.msg
 )
 
 generate_dynamic_reconfigure_options(
@@ -38,6 +39,7 @@ include_directories(
 add_service_files(
         FILES
         SetImuInfo.srv
+        SynchronizeCamera.srv
 )
 
 generate_messages(

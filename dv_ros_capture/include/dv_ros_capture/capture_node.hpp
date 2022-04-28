@@ -7,6 +7,7 @@
 
 #include <dv_ros_messaging/messaging.hpp>
 
+#include <dv_ros_capture/CameraDiscovery.h>
 #include <dv_ros_capture/DAVISConfig.h>
 #include <dv_ros_capture/DVXplorerConfig.h>
 #include <dv_ros_capture/PlaybackConfig.h>
@@ -31,6 +32,7 @@ using TimestampQueue = boost::lockfree::spsc_queue<int64_t, boost::lockfree::cap
 
 using TransformMessage  = DV_ROS_MSGS(geometry_msgs::TransformStamped);
 using TransformsMessage = DV_ROS_MSGS(tf2_msgs::TFMessage);
+using DiscoveryMessage  = DV_ROS_MSGS(dv_ros_capture::CameraDiscovery);
 
 namespace fs = std::filesystem;
 
@@ -75,6 +77,7 @@ private:
 	ros::Publisher mEventArrayPublisher;
 	ros::Publisher mTriggerPublisher;
 	ros::Publisher mTransformPublisher;
+	ros::Publisher mDiscoveryPublisher;
 	ros::ServiceServer mCameraService;
 	ros::ServiceServer mImuInfoService;
 
@@ -99,11 +102,13 @@ private:
 	TimestampQueue mTriggerQueue;
 	std::atomic<bool> mSpinThread = true;
 	std::thread mClock;
+	std::unique_ptr<std::thread> mDiscoveryThread = nullptr;
 	boost::recursive_mutex mReaderMutex;
 
 	std::unique_ptr<dv::noise::BackgroundActivityNoiseFilter<>> mNoiseFilter = nullptr;
 	void updateNoiseFilter(const bool enable, const int64_t backgroundActivityTime);
 
+	ros::Time startupTime;
 	int64_t mImuTimeOffset = 0;
 	std::atomic<int64_t> mCurrentSeek;
 	std::optional<TransformsMessage> mImuToCamTransforms = std::nullopt;

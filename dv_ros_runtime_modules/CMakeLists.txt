@@ -9,6 +9,7 @@ find_package(catkin REQUIRED
         dv_ros_msgs
         dv_ros_messaging
 )
+find_package(dv-processing 1.4 REQUIRED)
 
 catkin_package(
         # INCLUDE_DIRS include
@@ -24,8 +25,7 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
         /usr/local/${CMAKE_INSTALL_DATAROOTDIR}/dv /usr/local/share/dv)
 
 # Basic setup
-INCLUDE(dv-modules)
-DV_MODULE_SETUP()
+FIND_PACKAGE(dv 1.5 REQUIRED)
 
 include_directories(${catkin_INCLUDE_DIRS} ${DV_INCLUDE_DIRS})
 # Set full RPATH, modules are libraries for DV
@@ -38,7 +38,7 @@ SET_TARGET_PROPERTIES(ImageBridge
         PROPERTIES
         PREFIX "ros_"
         )
-TARGET_LINK_LIBRARIES(ImageBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})
+TARGET_LINK_LIBRARIES(ImageBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES} dv::processing)
 
 ADD_LIBRARY(ImuBridge SHARED src/RosIMUBridge.cpp)
 add_dependencies(ImuBridge ${catkin_EXPORTED_TARGETS})
@@ -48,7 +48,7 @@ SET_TARGET_PROPERTIES(ImuBridge
         PREFIX "ros_"
         )
 
-TARGET_LINK_LIBRARIES(ImuBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})
+TARGET_LINK_LIBRARIES(ImuBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES} dv::processing)
 
 ADD_LIBRARY(EventBridge SHARED src/RosEventBridge.cpp src/RosEventBridge.h)
 add_dependencies(EventBridge ${catkin_EXPORTED_TARGETS})
@@ -58,7 +58,7 @@ SET_TARGET_PROPERTIES(EventBridge
         PREFIX "ros_"
         )
 
-TARGET_LINK_LIBRARIES(EventBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})
+TARGET_LINK_LIBRARIES(EventBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES} dv::processing)
 
 ADD_LIBRARY(TriggerBridge SHARED src/RosTriggerBridge.cpp)
 add_dependencies(TriggerBridge ${catkin_EXPORTED_TARGETS})
@@ -68,4 +68,4 @@ SET_TARGET_PROPERTIES(TriggerBridge
         PREFIX "ros_"
         )
 
-TARGET_LINK_LIBRARIES(TriggerBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})
+TARGET_LINK_LIBRARIES(TriggerBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES} dv::processing)
