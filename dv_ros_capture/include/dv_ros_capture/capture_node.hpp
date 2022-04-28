@@ -11,9 +11,11 @@
 #include <dv_ros_capture/DAVISConfig.h>
 #include <dv_ros_capture/DVXplorerConfig.h>
 #include <dv_ros_capture/PlaybackConfig.h>
-#include <dv_ros_capture/SetImuInfoService.h>
-#include <dv_ros_capture/parameters_loader.hpp>
-#include <dv_ros_capture/reader.hpp>
+
+#include "SetImuInfoService.h"
+#include "SynchronizeCameraService.h"
+#include "parameters_loader.hpp"
+#include "reader.hpp"
 
 #include <boost/lockfree/spsc_queue.hpp>
 
@@ -80,6 +82,7 @@ private:
 	ros::Publisher mDiscoveryPublisher;
 	ros::ServiceServer mCameraService;
 	ros::ServiceServer mImuInfoService;
+	std::unique_ptr<ros::ServiceServer> mSyncServerService = nullptr;
 
 	// Declare the Reader to read from the device or from a recording.
 	dv_ros_node::Reader mReader;
@@ -104,6 +107,9 @@ private:
 	std::thread mClock;
 	std::unique_ptr<std::thread> mDiscoveryThread = nullptr;
 	boost::recursive_mutex mReaderMutex;
+
+	std::condition_variable mSyncCV;
+	std::mutex mSyncMutex;
 
 	std::unique_ptr<dv::noise::BackgroundActivityNoiseFilter<>> mNoiseFilter = nullptr;
 	void updateNoiseFilter(const bool enable, const int64_t backgroundActivityTime);
@@ -180,6 +186,15 @@ private:
 	[[nodiscard]] fs::path saveCalibration() const;
 
 	[[nodiscard]] fs::path getActiveCalibrationPath() const;
+
+	void runDiscovery(ros::NodeHandle &nodeHandle, const std::string &syncServiceName);
+
+	bool synchronizeCamera(
+		dv_ros_capture::SynchronizeCamera::Request &req, dv_ros_capture::SynchronizeCamera::Response &rsp);
+
+	[[nodiscard]] std::vector<std::string> discoverSyncDevices(ros::NodeHandle &nodeHandle) const;
+
+	void sendSyncCalls(ros::NodeHandle &nodeHandle, const std::vector<std::string> &serviceNames) const;
 };
 
 } // namespace dv_capture_node

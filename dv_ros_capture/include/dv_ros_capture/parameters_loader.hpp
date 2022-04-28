@@ -22,6 +22,8 @@ struct Params {
 	bool transformImuToCameraFrame = true;
 	bool noiseFiltering            = false;
 	int64_t noiseBATime            = 2000;
+
+	std::vector<std::string> syncDeviceList;
 };
 
 /**

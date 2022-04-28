@@ -38,6 +38,8 @@ ParametersLoader::ParametersLoader(const ros::NodeHandle &nodeHandle) {
 					params_.aedat4FilePath.string()));
 		}
 	}
+
+	nodeHandle.param<std::vector<std::string>>("syncDevices", params_.syncDeviceList, {});
 }
 
 Params ParametersLoader::getParams() {

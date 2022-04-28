@@ -10,6 +10,7 @@
 #include <chrono>
 #include <filesystem>
 #include <sensor_msgs/image_encodings.h>
+#include <unordered_set>
 #include <utility>
 
 using namespace dv_capture_node;
@@ -44,26 +45,23 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 	const auto &liveCapture = mReader.getCameraCapturePtr();
 	// If the pointer is valid - the reader is handling a live camera
 	if (liveCapture) {
-		mDiscoveryPublisher = nodeHandle.advertise<DiscoveryMessage>("/dvs/discovery", 10);
-		mDiscoveryThread    = std::make_unique<std::thread>([this, &liveCapture] {
-            DiscoveryMessage message;
-            message.isMaster         = liveCapture->isMasterCamera();
-            message.name             = liveCapture->getCameraName();
-            message.startupTime      = startupTime;
-            message.publishingEvents = mParams.events;
-            message.publishingFrames = mParams.frames;
-            message.publishingImu    = mParams.imu;
-            message.publishingEvents = mParams.events;
+		std::string serviceName;
+		if (liveCapture->isMasterCamera()) {
+			// Wait for all cameras to show up
+			const auto syncServiceList = discoverSyncDevices(nodeHandle);
+			runDiscovery(nodeHandle, serviceName);
+			sendSyncCalls(nodeHandle, syncServiceList);
+		}
+		else {
+			mSyncServerService = std::make_unique<ros::ServiceServer>(nodeHandle.advertiseService(
+				fmt::format("{}/sync", liveCapture->getCameraName()), &CaptureNode::synchronizeCamera, this));
+			serviceName        = mSyncServerService->getService();
+			runDiscovery(nodeHandle, serviceName);
 
-            // 5 Hz is enough
-            ros::Rate rate(5.0);
-            while (mSpinThread) {
-                message.header.seq++;
-                message.header.stamp = ros::Time::now();
-                mDiscoveryPublisher.publish(message);
-                rate.sleep();
-            }
-        });
+			ROS_INFO("Waiting for synchronization service call...");
+			std::unique_lock<std::mutex> lock(mSyncMutex);
+			mSyncCV.wait(lock);
+		}
 	}
 
 	if (mParams.frames) {
@@ -253,6 +251,32 @@ bool CaptureNode::setCameraInfo(sensor_msgs::SetCameraInfo::Request &req, sensor
 		rsp.status_message = fmt::format("Error storing camera calibration.");
 	}
 
+	return true;
+}
+
+bool CaptureNode::synchronizeCamera(
+	dv_ros_capture::SynchronizeCamera::Request &req, dv_ros_capture::SynchronizeCamera::Response &rsp) {
+	ROS_INFO_STREAM("Received synchronization request from [" << req.masterCameraName << "]");
+
+	// Assume failure case
+	rsp.success = false;
+
+	auto &liveCapture = mReader.getCameraCapturePtr();
+	if (!liveCapture) {
+		ROS_WARN("Received synchronization request on a non-live camera!");
+		return true;
+	}
+	if (liveCapture->isConnected() && !liveCapture->isMasterCamera()) {
+		// Update the timestamp offset
+		liveCapture->setTimestampOffset(req.timestampOffset);
+		ROS_INFO("Camera synchronized: timestamp offset updated.");
+		rsp.cameraName = liveCapture->getCameraName();
+		rsp.success    = true;
+		mSyncCV.notify_one();
+	}
+	else {
+		ROS_WARN("Received synchronization request on a master camera, please check synchronization cable!");
+	}
 	return true;
 }
 
@@ -586,4 +610,106 @@ CaptureNode::~CaptureNode() {
 
 bool CaptureNode::isRunning() const {
 	return mSpinThread.load(std::memory_order_relaxed);
+}
+
+void CaptureNode::runDiscovery(ros::NodeHandle &nodeHandle, const std::string &syncServiceName) {
+	const auto &liveCapture = mReader.getCameraCapturePtr();
+
+	if (liveCapture == nullptr) {
+		return;
+	}
+
+	mDiscoveryPublisher = nodeHandle.advertise<DiscoveryMessage>("/dvs/discovery", 10);
+	mDiscoveryThread    = std::make_unique<std::thread>([this, &liveCapture, &syncServiceName] {
+        DiscoveryMessage message;
+        message.isMaster         = liveCapture->isMasterCamera();
+        message.name             = liveCapture->getCameraName();
+        message.startupTime      = startupTime;
+        message.publishingEvents = mParams.events;
+        message.publishingFrames = mParams.frames;
+        message.publishingImu    = mParams.imu;
+        message.publishingEvents = mParams.events;
+        message.syncServiceTopic = syncServiceName;
+        // 5 Hz is enough
+        ros::Rate rate(5.0);
+        while (mSpinThread) {
+            if (mDiscoveryPublisher.getNumSubscribers() > 0) {
+                message.header.seq++;
+                message.header.stamp = ros::Time::now();
+                mDiscoveryPublisher.publish(message);
+            }
+            rate.sleep();
+        }
+    });
+}
+
+std::vector<std::string> CaptureNode::discoverSyncDevices(ros::NodeHandle &nodeHandle) const {
+	if (mParams.syncDeviceList.empty()) {
+		return {};
+	}
+
+	ROS_INFO_STREAM(
+		"Waiting for devices [" << fmt::format("{}", fmt::join(mParams.syncDeviceList, ", ")) << "] to be online");
+
+	// List info about each sync device
+	struct DiscoveryContext {
+		std::unordered_set<std::string> discoveredDevices;
+		std::vector<std::string> serviceNames;
+		std::mutex m;
+		std::condition_variable cv;
+		std::vector<std::string> deviceList;
+
+		void handleMessage(const boost::shared_ptr<DiscoveryMessage> &message) {
+			const std::string cameraName(message->name.c_str());
+			if (discoveredDevices.contains(cameraName)) {
+				return;
+			}
+
+			if (std::find(deviceList.begin(), deviceList.end(), cameraName) != deviceList.end()) {
+				discoveredDevices.insert(cameraName);
+				serviceNames.emplace_back(message->syncServiceTopic.c_str());
+				if (serviceNames.size() == cameraName.size()) {
+					cv.notify_one();
+				}
+			}
+		}
+	};
+
+	DiscoveryContext context;
+	context.deviceList = mParams.syncDeviceList;
+
+	auto subscriber = nodeHandle.subscribe("/dvs/discovery", 10, &DiscoveryContext::handleMessage, &context);
+
+	std::unique_lock<std::mutex> lock(context.m);
+	context.cv.wait(lock);
+
+	ROS_INFO("All sync devices are online.");
+
+	return context.serviceNames;
+}
+
+void CaptureNode::sendSyncCalls(ros::NodeHandle &nodeHandle, const std::vector<std::string> &serviceNames) const {
+	if (serviceNames.empty()) {
+		return;
+	}
+
+	const auto &liveCapture = mReader.getCameraCapturePtr();
+	if (!liveCapture) {
+		return;
+	}
+
+	dv_ros_capture::SynchronizeCamera srv;
+	srv.request.timestampOffset  = liveCapture->getTimestampOffset();
+	srv.request.masterCameraName = liveCapture->getCameraName();
+
+	for (const auto &serviceName : serviceNames) {
+		ros::ServiceClient client = nodeHandle.serviceClient<dv_ros_capture::SynchronizeCamera>(serviceName);
+		client.waitForExistence();
+		if (client.call(srv)) {
+			ROS_INFO_STREAM("Successfully synchronized device [" << srv.response.cameraName << "]");
+		}
+		else {
+			ROS_ERROR_STREAM("Failed to synchronize device available on service [" << serviceName << "]");
+		}
+	}
 }
