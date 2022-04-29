@@ -662,7 +662,7 @@ std::vector<std::string> CaptureNode::discoverSyncDevices() const {
 			if (std::find(deviceList.begin(), deviceList.end(), cameraName) != deviceList.end()) {
 				discoveredDevices.insert(cameraName);
 				serviceNames.emplace_back(message->syncServiceTopic.c_str());
-				if (serviceNames.size() == cameraName.size()) {
+				if (serviceNames.size() == deviceList.size()) {
 					complete = true;
 				}
 			}
