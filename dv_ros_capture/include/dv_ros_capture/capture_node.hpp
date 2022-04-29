@@ -48,7 +48,7 @@ public:
 	 * @param nodeHandle ros::NodeHandle.
 	 * @param params dv_ros_node::Params read from a configuration file specified in the launch file.
 	 */
-	CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params &params);
+	CaptureNode(std::shared_ptr<ros::NodeHandle> &nodeHandle, const dv_ros_node::Params &params);
 
 	/**
 	 * Stop the running threads.
@@ -83,11 +83,12 @@ private:
 	ros::ServiceServer mCameraService;
 	ros::ServiceServer mImuInfoService;
 	std::unique_ptr<ros::ServiceServer> mSyncServerService = nullptr;
+	std::shared_ptr<ros::NodeHandle> mNodeHandle           = nullptr;
 
 	// Declare the Reader to read from the device or from a recording.
 	dv_ros_node::Reader mReader;
 
-	// Paramters read from the configuration file. Set to true the type of data that needs to be streamed.
+	// Parameters read from the configuration file. Set to true the type of data that needs to be streamed.
 	dv_ros_node::Params mParams;
 
 	// Camera info message buffer
@@ -105,11 +106,11 @@ private:
 	TimestampQueue mTriggerQueue;
 	std::atomic<bool> mSpinThread = true;
 	std::thread mClock;
+    std::thread mSyncThread;
 	std::unique_ptr<std::thread> mDiscoveryThread = nullptr;
 	boost::recursive_mutex mReaderMutex;
 
-	std::condition_variable mSyncCV;
-	std::mutex mSyncMutex;
+	std::atomic<bool> mSynchronized;
 
 	std::unique_ptr<dv::noise::BackgroundActivityNoiseFilter<>> mNoiseFilter = nullptr;
 	void updateNoiseFilter(const bool enable, const int64_t backgroundActivityTime);
@@ -187,14 +188,16 @@ private:
 
 	[[nodiscard]] fs::path getActiveCalibrationPath() const;
 
-	void runDiscovery(ros::NodeHandle &nodeHandle, const std::string &syncServiceName);
+	void runDiscovery(const std::string &syncServiceName);
 
 	bool synchronizeCamera(
 		dv_ros_capture::SynchronizeCamera::Request &req, dv_ros_capture::SynchronizeCamera::Response &rsp);
 
-	[[nodiscard]] std::vector<std::string> discoverSyncDevices(ros::NodeHandle &nodeHandle) const;
+	[[nodiscard]] std::vector<std::string> discoverSyncDevices() const;
 
-	void sendSyncCalls(ros::NodeHandle &nodeHandle, const std::vector<std::string> &serviceNames) const;
+	void sendSyncCalls(const std::vector<std::string> &serviceNames) const;
+
+    void synchronizationThread();
 };
 
 } // namespace dv_capture_node
