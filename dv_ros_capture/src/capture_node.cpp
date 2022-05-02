@@ -11,7 +11,6 @@
 #include <filesystem>
 #include <sensor_msgs/image_encodings.h>
 #include <unordered_set>
-#include <utility>
 
 using namespace dv_capture_node;
 using namespace dv_ros_msgs;
@@ -712,8 +711,8 @@ void CaptureNode::sendSyncCalls(const std::vector<std::string> &serviceNames) co
 
 void CaptureNode::synchronizationThread() {
 	std::string serviceName;
-    const auto &liveCapture = mReader.getCameraCapturePtr();
-    if (liveCapture->isMasterCamera()) {
+	const auto &liveCapture = mReader.getCameraCapturePtr();
+	if (liveCapture->isMasterCamera()) {
 		// Wait for all cameras to show up
 		const auto syncServiceList = discoverSyncDevices();
 		runDiscovery(serviceName);
@@ -732,4 +731,21 @@ void CaptureNode::synchronizationThread() {
 			std::this_thread::sleep_for(1ms);
 		}
 	}
+}
+
+dv_ros_msgs::ImuMessage CaptureNode::transformImuFrame(ImuMessage &&imu) {
+	if (mParams.transformImuToCameraFrame && mImuToCamTransforms.has_value()) {
+		const Eigen::Vector3<double> resW
+			= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.angular_velocity);
+		imu.angular_velocity.x = resW.x();
+		imu.angular_velocity.y = resW.y();
+		imu.angular_velocity.z = resW.z();
+
+		const Eigen::Vector3<double> resV
+			= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.linear_acceleration);
+		imu.linear_acceleration.x = resV.x();
+		imu.linear_acceleration.y = resV.y();
+		imu.linear_acceleration.z = resV.z();
+	}
+	return imu;
 }

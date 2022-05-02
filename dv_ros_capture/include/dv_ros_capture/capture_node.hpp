@@ -167,22 +167,7 @@ private:
 	 * @param imu
 	 * @return ROS Imu message in camera reference frame
 	 */
-	[[nodiscard]] inline dv_ros_msgs::ImuMessage transformImuFrame(dv_ros_msgs::ImuMessage &&imu) {
-		if (mParams.transformImuToCameraFrame && mImuToCamTransforms.has_value()) {
-			const Eigen::Vector3<double> resW
-				= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.angular_velocity);
-			imu.angular_velocity.x = resW.x();
-			imu.angular_velocity.y = resW.y();
-			imu.angular_velocity.z = resW.z();
-
-			const Eigen::Vector3<double> resV
-				= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.linear_acceleration);
-			imu.linear_acceleration.x = resV.x();
-			imu.linear_acceleration.y = resV.y();
-			imu.linear_acceleration.z = resV.z();
-		}
-		return imu;
-	}
+	[[nodiscard]] inline dv_ros_msgs::ImuMessage transformImuFrame(dv_ros_msgs::ImuMessage &&imu);
 
 	[[nodiscard]] fs::path saveCalibration() const;
 
