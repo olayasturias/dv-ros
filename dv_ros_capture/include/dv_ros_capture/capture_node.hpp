@@ -1,5 +1,6 @@
 #pragma once
 
+#include <dv-processing/camera/calibration_set.hpp>
 #include <dv-processing/camera/calibrations/camera_calibration.hpp>
 #include <dv-processing/core/core.hpp>
 #include <dv-processing/io/mono_camera_recording.hpp>
@@ -10,6 +11,7 @@
 #include <dv_ros_capture/DAVISConfig.h>
 #include <dv_ros_capture/DVXplorerConfig.h>
 #include <dv_ros_capture/PlaybackConfig.h>
+#include <dv_ros_capture/SetImuBiasesService.h>
 #include <dv_ros_capture/SetImuInfoService.h>
 #include <dv_ros_capture/parameters_loader.hpp>
 #include <dv_ros_capture/reader.hpp>
@@ -77,6 +79,7 @@ private:
 	ros::Publisher mTransformPublisher;
 	ros::ServiceServer mCameraService;
 	ros::ServiceServer mImuInfoService;
+	ros::ServiceServer mImuBiasesService;
 
 	// Declare the Reader to read from the device or from a recording.
 	dv_ros_node::Reader mReader;
@@ -105,6 +108,7 @@ private:
 	void updateNoiseFilter(const bool enable, const int64_t backgroundActivityTime);
 
 	int64_t mImuTimeOffset = 0;
+	Eigen::Vector3<float> mAccBiases, mGyroBiases;
 	std::atomic<int64_t> mCurrentSeek;
 	std::optional<TransformsMessage> mImuToCamTransforms = std::nullopt;
 	dv::kinematics::Transformationf mImuToCamTransform
@@ -125,6 +129,7 @@ private:
 	 */
 	void imuPublisher();
 	bool setImuInfo(dv_ros_capture::SetImuInfo::Request &req, dv_ros_capture::SetImuInfo::Response &rsp);
+	bool setImuBiases(dv_ros_capture::SetImuBiases::Request &req, dv_ros_capture::SetImuBiases::Response &rsp);
 
 	/**
 	 * Publish the events if mEventsBool is True
@@ -157,6 +162,15 @@ private:
 	 * @return ROS Imu message in camera reference frame
 	 */
 	[[nodiscard]] inline dv_ros_msgs::ImuMessage transformImuFrame(dv_ros_msgs::ImuMessage &&imu) {
+		if (mParams.unbiasedImuData) {
+			imu.linear_acceleration.x -= mAccBiases.x();
+			imu.linear_acceleration.y -= mAccBiases.y();
+			imu.linear_acceleration.z -= mAccBiases.z();
+
+			imu.angular_velocity.x -= mGyroBiases.x();
+			imu.angular_velocity.y -= mGyroBiases.y();
+			imu.angular_velocity.z -= mGyroBiases.z();
+		}
 		if (mParams.transformImuToCameraFrame) {
 			const Eigen::Vector3<double> resW
 				= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.angular_velocity);
@@ -170,10 +184,14 @@ private:
 			imu.linear_acceleration.y = resV.y();
 			imu.linear_acceleration.z = resV.z();
 		}
+
 		return imu;
 	}
 
+	[[nodiscard]] dv::camera::CalibrationSet generateCalibrationSet() const;
 	[[nodiscard]] fs::path saveCalibration() const;
+
+	fs::path generateActiveCalibrationFile() const;
 
 	[[nodiscard]] fs::path getActiveCalibrationPath() const;
 };

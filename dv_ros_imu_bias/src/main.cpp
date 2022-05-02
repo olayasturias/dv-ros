@@ -14,14 +14,13 @@
 using namespace std::chrono_literals;
 using TransformsMessage = DV_ROS_MSGS(tf2_msgs::TFMessage);
 
-ros::Subscriber transformSubscriber, imuSubscriber;
-Eigen::Quaternion<float> imuOrientation = Eigen::Quaternion<float>::Identity();
+ros::Subscriber imuSubscriber;
 int64_t startTimestamp = -1, collectionDuration = 0;
 float varianceThreshold;
 std::vector<std::vector<float>> accValues(3), gyroValues(3);
 Eigen::Vector3f accBiases, gyroBiases;
 
-bool startCollecting = false, transformationReady = false;
+bool startCollecting = false;
 ros::ServiceClient client;
 
 void storeImuBiases() {
@@ -75,8 +74,7 @@ void estimateBias() {
 		biases.push_back(mean);
 	}
 
-	auto transformedG = imuOrientation.toRotationMatrix() * earthG;
-	accBiases         = Eigen::Vector3f(biases[0], biases[1], biases[2]) + transformedG;
+	accBiases         = Eigen::Vector3f(biases[0], biases[1], biases[2]) + earthG;
 
 	//	if (mean < -(earthG + gravityRange) || mean > -(earthG - gravityRange)) {
 	//		throw dv::exceptions::RuntimeError(
@@ -91,11 +89,11 @@ void estimateBias() {
 					<< "[" << accBiases.x() << ", " << accBiases.y() << ", " << accBiases.z() << "]");
 	ROS_INFO_STREAM("Gyroscope biases [x, y, z] in rad/s: "
 					<< "[" << gyroBiases.x() << ", " << gyroBiases.y() << ", " << gyroBiases.z() << "]");
-	ROS_INFO_STREAM("g: [ " << transformedG.x() << ", " << transformedG.y() << ", " << transformedG.z() << " ]");
+	ROS_INFO_STREAM("g: [ " << earthG.x() << ", " << earthG.y() << ", " << earthG.z() << " ]");
 }
 
 void imuCallback(const dv_ros_msgs::ImuMessage::ConstPtr &msgPtr) {
-	if (!startCollecting || !transformationReady) {
+	if (!startCollecting) {
 		return;
 	}
 	if (startTimestamp < 0) {
@@ -125,22 +123,9 @@ void imuCallback(const dv_ros_msgs::ImuMessage::ConstPtr &msgPtr) {
 	}
 }
 
-void tfCallback(const TransformsMessage::ConstPtr &msgPtr) {
-	for (const auto &t : msgPtr->transforms) {
-		if (t.header.frame_id == "imu" && t.child_frame_id == "camera") {
-			auto rotation  = t.transform.rotation;
-			imuOrientation = Eigen::Quaternion<float>(static_cast<float>(rotation.w), static_cast<float>(rotation.x),
-				static_cast<float>(rotation.y), static_cast<float>(rotation.z));
-			transformSubscriber.shutdown();
-			transformationReady = true;
-		}
-	}
-}
-
 void reconfigureBias(dv_ros_imu_bias::BiasesEstimationConfig &config, uint32_t l) {
 	varianceThreshold   = static_cast<float>(config.variance_threshold);
 	collectionDuration  = static_cast<int64_t>(1e+6 * config.collection_duration);
-	transformationReady = config.IMU_data_frame == 1;
 	if (config.start_collecting) {
 		startCollecting         = !startCollecting;
 		config.start_collecting = false;
@@ -169,7 +154,6 @@ int main(int argc, char **argv) {
 	f = boost::bind(&reconfigureBias, _1, _2);
 	dynamicReconfigure.setCallback(f);
 
-	transformSubscriber = nodeHandler.subscribe("/tf", 10, &tfCallback);
 	imuSubscriber       = nodeHandler.subscribe("imu", 10, &imuCallback);
 
 	ros::spin();

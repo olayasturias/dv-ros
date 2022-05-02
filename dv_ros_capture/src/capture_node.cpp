@@ -1,4 +1,3 @@
-#include <dv-processing/camera/calibration_set.hpp>
 #include <dv-processing/camera/calibrations/camera_calibration.hpp>
 #include <dv-processing/kinematics/transformation.hpp>
 
@@ -9,6 +8,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <sensor_msgs/distortion_models.h>
 #include <sensor_msgs/image_encodings.h>
 #include <utility>
 
@@ -65,23 +65,20 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 	mCameraInfoPublisher = nodeHandle.advertise<CameraInfoMessage>("camera_info", 10);
 	mCameraService       = nodeHandle.advertiseService("set_camera_info", &CaptureNode::setCameraInfo, this);
 	mImuInfoService      = nodeHandle.advertiseService("set_imu_info", &CaptureNode::setImuInfo, this);
+	mImuBiasesService    = nodeHandle.advertiseService("set_imu_biases", &CaptureNode::setImuBiases, this);
 
-	fs::path activeCalibrationPath = getActiveCalibrationPath();
-	fs::path calibrationPath;
+	fs::path calibrationPath = getActiveCalibrationPath();
 	if (!mParams.cameraCalibrationFilePath.empty()) {
 		ROS_INFO_STREAM("Loading user supplied calibration at path [" << mParams.cameraCalibrationFilePath << "]");
 		if (!fs::exists(mParams.cameraCalibrationFilePath)) {
 			throw dv::exceptions::InvalidArgument<std::string>(
 				"User supplied calibration file does not exist!", mParams.cameraCalibrationFilePath);
 		}
-		calibrationPath = mParams.cameraCalibrationFilePath;
-	}
-	else if (fs::exists(activeCalibrationPath)) {
-		ROS_INFO_STREAM("Loading auto-detected calibration from [" << activeCalibrationPath << "]");
-		calibrationPath = activeCalibrationPath;
+		// update/generate active calibration file from used passed camera calibration.
+		fs::copy_file(mParams.cameraCalibrationFilePath, calibrationPath, fs::copy_options::overwrite_existing);
 	}
 
-	if (!calibrationPath.empty()) {
+	if (fs::exists(calibrationPath)) {
 		auto calibSet                = dv::camera::CalibrationSet::LoadFromFile(calibrationPath);
 		const std::string cameraName = mReader.getCameraName();
 		auto cameraCalibration       = calibSet.getCameraCalibrationByName(cameraName);
@@ -95,6 +92,14 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 
 			mImuToCamTransform = dv::kinematics::Transformationf(
 				0, Eigen::Matrix<float, 4, 4, Eigen::RowMajor>(imuCalib->transformationToC0.data()));
+
+			mAccBiases.x() = imuCalib->accOffsetAvg.x;
+			mAccBiases.y() = imuCalib->accOffsetAvg.y;
+			mAccBiases.z() = imuCalib->accOffsetAvg.z;
+
+			mGyroBiases.x() = imuCalib->omegaOffsetAvg.x;
+			mGyroBiases.y() = imuCalib->omegaOffsetAvg.y;
+			mGyroBiases.z() = imuCalib->omegaOffsetAvg.z;
 
 			const auto translation      = mImuToCamTransform.getTranslation<Eigen::Vector3d>();
 			msg.transform.translation.x = translation.x();
@@ -138,6 +143,7 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 			const auto width = static_cast<float>(resolution->width);
 			populateInfoMsg(dv::camera::CameraGeometry(
 				width, width, width * 0.5f, static_cast<float>(resolution->height) * 0.5f, *resolution));
+			generateActiveCalibrationFile();
 		}
 		else {
 			throw std::runtime_error("Sensor resolution not available.");
@@ -199,11 +205,15 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 void CaptureNode::populateInfoMsg(const dv::camera::CameraGeometry &cameraGeometry) {
 	mCameraInfoMsg.width  = cameraGeometry.getResolution().width;
 	mCameraInfoMsg.height = cameraGeometry.getResolution().height;
+
+	const auto distortion = cameraGeometry.getDistortion();
+	mCameraInfoMsg.D.assign(distortion.begin(), distortion.end());
 	if (cameraGeometry.getDistortionModel() == dv::camera::DistortionModel::Equidistant) {
-		mCameraInfoMsg.distortion_model = "fisheye";
+		mCameraInfoMsg.distortion_model = sensor_msgs::distortion_models::EQUIDISTANT;
 	}
-	else if (cameraGeometry.getDistortionModel() == dv::camera::DistortionModel::RadTan) {
-		mCameraInfoMsg.distortion_model = "plumb_bob";
+	else if (cameraGeometry.getDistortionModel() == dv::camera::DistortionModel::RadTan
+			 || cameraGeometry.getDistortionModel() == dv::camera::DistortionModel::None) {
+		mCameraInfoMsg.distortion_model = sensor_msgs::distortion_models::PLUMB_BOB;
 		if (mCameraInfoMsg.D.size() < 5) {
 			mCameraInfoMsg.D.resize(5, 0.0);
 		}
@@ -212,20 +222,47 @@ void CaptureNode::populateInfoMsg(const dv::camera::CameraGeometry &cameraGeomet
 		throw dv::exceptions::InvalidArgument<dv::camera::DistortionModel>(
 			"Unknown camera model.", cameraGeometry.getDistortionModel());
 	}
-	auto cx               = cameraGeometry.getCentralPoint().x;
-	auto cy               = cameraGeometry.getCentralPoint().y;
-	auto fx               = cameraGeometry.getFocalLength().x;
-	auto fy               = cameraGeometry.getFocalLength().y;
-	mCameraInfoMsg.K      = {fx, 0, cx, 0, fy, cy, 0, 0, 1};
-	const auto distortion = cameraGeometry.getDistortion();
-	mCameraInfoMsg.D.assign(distortion.begin(), distortion.end());
-
+	auto cx          = cameraGeometry.getCentralPoint().x;
+	auto cy          = cameraGeometry.getCentralPoint().y;
+	auto fx          = cameraGeometry.getFocalLength().x;
+	auto fy          = cameraGeometry.getFocalLength().y;
+	mCameraInfoMsg.K = {fx, 0, cx, 0, fy, cy, 0, 0, 1};
 	mCameraInfoMsg.R = {1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0};
 	mCameraInfoMsg.P = {fx, 0, cx, 0, 0, fy, cy, 0, 0, 0, 1.0, 0};
 }
 
 bool CaptureNode::setCameraInfo(sensor_msgs::SetCameraInfo::Request &req, sensor_msgs::SetCameraInfo::Response &rsp) {
 	mCameraInfoMsg = req.camera_info;
+
+	try {
+		auto calibPath     = saveCalibration();
+		rsp.success        = true;
+		rsp.status_message = fmt::format("Calibration stored successfully in {0}.", calibPath);
+	}
+	catch (const std::exception &e) {
+		rsp.success        = false;
+		rsp.status_message = fmt::format("Error storing camera calibration.");
+	}
+
+	return true;
+}
+
+bool CaptureNode::setImuBiases(
+	dv_ros_capture::SetImuBiases::Request &req, dv_ros_capture::SetImuBiases::Response &rsp) {
+	ROS_INFO("Setting IMU biases...");
+	if (mParams.unbiasedImuData) {
+		ROS_WARN("The IMU data out of this node are unbiased, hence the biases calculation is wrong Not storing "
+				 "computed biases.");
+		return false;
+	}
+
+	mAccBiases.x() = req.accBiases.x;
+	mAccBiases.y() = req.accBiases.y;
+	mAccBiases.z() = req.accBiases.z;
+
+	mGyroBiases.x() = req.gyroBiases.x;
+	mGyroBiases.y() = req.gyroBiases.y;
+	mGyroBiases.z() = req.gyroBiases.z;
 
 	try {
 		auto calibPath     = saveCalibration();
@@ -248,8 +285,10 @@ bool CaptureNode::setImuInfo(dv_ros_capture::SetImuInfo::Request &req, dv_ros_ca
 	stampedTransform.child_frame_id    = mParams.cameraFrameName;
 	mImuToCamTransforms->transforms[0] = stampedTransform;
 
-	Eigen::Quaternion<float> q(stampedTransform.transform.rotation.w, stampedTransform.transform.rotation.x,
-		stampedTransform.transform.rotation.y, stampedTransform.transform.rotation.z);
+	Eigen::Quaternion<float> q(static_cast<float>(stampedTransform.transform.rotation.w),
+		static_cast<float>(stampedTransform.transform.rotation.x),
+		static_cast<float>(stampedTransform.transform.rotation.y),
+		static_cast<float>(stampedTransform.transform.rotation.z));
 	mImuToCamTransform = dv::kinematics::Transformationf(0, Eigen::Vector3f::Zero(), q);
 
 	try {
@@ -271,6 +310,19 @@ fs::path CaptureNode::getActiveCalibrationPath() const {
 		"{0}/.dv_camera/camera_calibration/{1}/active_calibration.json", std::getenv("HOME"), cameraName);
 }
 
+fs::path CaptureNode::generateActiveCalibrationFile() const {
+	ROS_INFO("Generation active calibration file...");
+	std::string cameraName = mReader.getCameraName();
+	fs::path calibPath     = fmt::format("{0}/.dv_camera/camera_calibration/{1}", std::getenv("HOME"), cameraName);
+	if (!fs::is_directory(calibPath) || !fs::exists(calibPath)) {
+		fs::create_directories(calibPath);
+	}
+	calibPath     = getActiveCalibrationPath();
+	auto calibSet = generateCalibrationSet();
+	calibSet.writeToFile(calibPath);
+	return calibPath;
+}
+
 fs::path CaptureNode::saveCalibration() const {
 	std::string cameraName = mReader.getCameraName();
 	fs::path calibPath     = fmt::format("{0}/.dv_camera/camera_calibration/{1}", std::getenv("HOME"), cameraName);
@@ -282,13 +334,31 @@ fs::path CaptureNode::saveCalibration() const {
 	auto date = fmt::format("{:%Y_%m_%d_%H_%M_%S}", dt);
 	calibPath = fmt::format("{0}/calibration_camera_{1}_{2}.json", calibPath, cameraName, date);
 
-	auto calib       = dv::camera::calibrations::CameraCalibration();
-	calib.name       = cameraName;
-	calib.resolution = cv::Size(static_cast<int>(mCameraInfoMsg.width), static_cast<int>(mCameraInfoMsg.height));
+	generateCalibrationSet().writeToFile(calibPath);
+
+	fs::copy_file(calibPath, getActiveCalibrationPath(), fs::copy_options::overwrite_existing);
+	return calibPath;
+}
+
+dv::camera::CalibrationSet CaptureNode::generateCalibrationSet() const {
+	ROS_INFO("Generation calibration set...");
+	std::string cameraName = mReader.getCameraName();
+	auto calib             = dv::camera::calibrations::CameraCalibration();
+	calib.name             = cameraName;
+	calib.resolution       = cv::Size(static_cast<int>(mCameraInfoMsg.width), static_cast<int>(mCameraInfoMsg.height));
 	for (const auto &d : mCameraInfoMsg.D) {
 		calib.distortion.push_back(static_cast<float>(d));
 	}
-	calib.distortionModel = dv::camera::DistortionModel::RadTan;
+	if (mCameraInfoMsg.distortion_model.c_str() == sensor_msgs::distortion_models::PLUMB_BOB) {
+		calib.distortionModel = dv::camera::DistortionModel::RadTan;
+	}
+	else if (mCameraInfoMsg.distortion_model.c_str() == sensor_msgs::distortion_models::EQUIDISTANT) {
+		calib.distortionModel = dv::camera::DistortionModel::Equidistant;
+	}
+	else {
+		throw dv::exceptions::InvalidArgument<dv_ros_msgs::CameraInfoMessage::_distortion_model_type>(
+			"Unknown camera model.", mCameraInfoMsg.distortion_model);
+	}
 	calib.focalLength = cv::Point2f(static_cast<float>(mCameraInfoMsg.K[0]), static_cast<float>(mCameraInfoMsg.K[4]));
 	calib.principalPoint
 		= cv::Point2f(static_cast<float>(mCameraInfoMsg.K[2]), static_cast<float>(mCameraInfoMsg.K[5]));
@@ -306,19 +376,25 @@ fs::path CaptureNode::saveCalibration() const {
 		imuCalib.name = cameraName;
 		const auto &t = mImuToCamTransforms->transforms.front().transform.translation;
 		const auto &r = mImuToCamTransforms->transforms.front().transform.rotation;
-		const dv::kinematics::Transformationf transform(
-			0, Eigen::Vector3f(t.x, t.y, t.z), Eigen::Quaternionf(r.w, r.x, r.y, r.z));
+		const dv::kinematics::Transformationf transform(0,
+			Eigen::Vector3f(static_cast<float>(t.x), static_cast<float>(t.y), static_cast<float>(t.z)),
+			Eigen::Quaternionf(
+				static_cast<float>(r.w), static_cast<float>(r.x), static_cast<float>(r.y), static_cast<float>(r.z)));
 		// Transposing here, because data is saved in RowMajor order instead of ColMajor
 		const Eigen::Matrix4f &mat  = transform.getTransform().transpose();
 		imuCalib.transformationToC0 = std::vector<float>(mat.data(), mat.data() + mat.rows() * mat.cols());
 
+		imuCalib.accOffsetAvg.x = mAccBiases.x();
+		imuCalib.accOffsetAvg.y = mAccBiases.y();
+		imuCalib.accOffsetAvg.z = mAccBiases.z();
+
+		imuCalib.omegaOffsetAvg.x = mGyroBiases.x();
+		imuCalib.omegaOffsetAvg.y = mGyroBiases.y();
+		imuCalib.omegaOffsetAvg.z = mGyroBiases.z();
+
 		calibSet.addImuCalibration(imuCalib);
 	}
-
-	calibSet.writeToFile(calibPath);
-
-	fs::copy_file(calibPath, getActiveCalibrationPath(), fs::copy_options::overwrite_existing);
-	return calibPath;
+	return calibSet;
 }
 
 void CaptureNode::startCapture() {

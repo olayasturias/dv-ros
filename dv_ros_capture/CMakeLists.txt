@@ -7,7 +7,6 @@ find_package(catkin REQUIRED COMPONENTS
         std_msgs
         sensor_msgs
         geometry_msgs
-        message_generation
         image_transport
         visualization_msgs
         dv_ros_msgs
@@ -38,6 +37,7 @@ include_directories(
 add_service_files(
         FILES
         SetImuInfo.srv
+        SetImuBiases.srv
 )
 
 generate_messages(
@@ -57,6 +57,7 @@ set(SOURCE
         src/reader.cpp
         src/main.cpp
         )
+
 add_executable(capture_node ${SOURCE})
 
 add_dependencies(capture_node ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})

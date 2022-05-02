@@ -1,4 +1,5 @@
-dv_ros_capture/ImuInfo imu_info # The imu calibration info to store
+geometry_msgs/Vector3 accBiases     # The imu biases estimation to store [m/s^2]
+geometry_msgs/Vector3 gyroBiases    # The imu biases estimation to store [rad/s]
 ---
 bool success          # True if the call succeeded
 string status_message # Used to give details about success

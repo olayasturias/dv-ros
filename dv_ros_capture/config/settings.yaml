@@ -14,6 +14,8 @@ cameraFrameName: "camera"
 imuFrameName: "imu"
 # if true, the IMU accelerations and velocities are expressed in the camera frame
 transformImuToCameraFrame: true
+# If true, publish unbiased IMU data
+unbiasedImuData: true
 # Path to the camera calibration file
 cameraCalibrationFilePath: ""
 # Path to the aedat4 file, if not specified the first available camera will be read
@@ -24,3 +26,4 @@ cameraName: ""
 noiseFiltering: false
 # Noise filter background activity time threshold in microseconds
 noiseBackgroundActivityTime: 2000
+
