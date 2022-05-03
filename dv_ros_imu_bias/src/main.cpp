@@ -16,7 +16,7 @@ using TransformsMessage = DV_ROS_MSGS(tf2_msgs::TFMessage);
 
 ros::Subscriber imuSubscriber;
 int64_t startTimestamp = -1, collectionDuration = 0;
-float varianceThreshold;
+float varianceThreshold, gravityRange;
 std::vector<std::vector<float>> accValues(3), gyroValues(3);
 Eigen::Vector3f accBiases, gyroBiases;
 
@@ -34,11 +34,16 @@ void storeImuBiases() {
 	srv.request.gyroBiases.y = gyroBiases.y();
 	srv.request.gyroBiases.z = gyroBiases.z();
 
-	if (client.call(srv)) {
-		ROS_INFO("IMU biases stored in calibration file.");
+	client.call(srv);
+	auto rsp = srv.response;
+	ROS_INFO_STREAM(rsp.status_message);
+	if (rsp.success) {
+		imuSubscriber.shutdown();
+		ROS_INFO("Shutting down IMU biases estimation node...");
+		ros::shutdown();
 	}
 	else {
-		ROS_ERROR("Failed to store the IMU biases in the calibration file.");
+		ROS_ERROR("You can try again calibrating the IMU biases.");
 	}
 }
 
@@ -74,13 +79,12 @@ void estimateBias() {
 		biases.push_back(mean);
 	}
 
-	accBiases         = Eigen::Vector3f(biases[0], biases[1], biases[2]) + earthG;
+	if (biases[1] < -(earthG[1] + gravityRange) || biases[1] > -(earthG[1] - gravityRange)) {
+		throw dv::exceptions::RuntimeError(
+			"Gravity vector is not aligned, please make sure to place the camera horizontally on a level surface.");
+	}
 
-	//	if (mean < -(earthG + gravityRange) || mean > -(earthG - gravityRange)) {
-	//		throw dv::exceptions::RuntimeError(
-	//			"Gravity vector is not aligned, please make sure to place the camera horizontally on a level surface.");
-	//	}
-
+	accBiases = Eigen::Vector3f(biases[0], biases[1], biases[2]) + earthG;
 	gyroBiases = Eigen::Vector3f(biases[3], biases[4], biases[5]);
 
 	// Result printing
@@ -108,6 +112,7 @@ void imuCallback(const dv_ros_msgs::ImuMessage::ConstPtr &msgPtr) {
 	gyroValues[2].push_back(static_cast<float>(msgPtr->angular_velocity.z));
 
 	if (dv_ros_msgs::toDvTime(msgPtr->header.stamp) - startTimestamp > collectionDuration) {
+		startCollecting = false;
 		// Print some info
 		const size_t sampleSize = accValues[0].size();
 		ROS_INFO_STREAM(
@@ -117,19 +122,17 @@ void imuCallback(const dv_ros_msgs::ImuMessage::ConstPtr &msgPtr) {
 
 		estimateBias();
 		storeImuBiases();
-		imuSubscriber.shutdown();
-		ROS_INFO("Shutting down imu biases estimation node...");
-		ros::shutdown();
 	}
 }
 
 void reconfigureBias(dv_ros_imu_bias::BiasesEstimationConfig &config, uint32_t l) {
-	varianceThreshold   = static_cast<float>(config.variance_threshold);
-	collectionDuration  = static_cast<int64_t>(1e+6 * config.collection_duration);
-	if (config.start_collecting) {
-		startCollecting         = !startCollecting;
-		config.start_collecting = false;
+	varianceThreshold  = static_cast<float>(config.variance_threshold);
+	gravityRange       = static_cast<float>(config.gravity_range);
+	collectionDuration = static_cast<int64_t>(1e+6 * config.collection_duration);
 
+	if (config.estimate_biases) {
+		startCollecting        = !startCollecting;
+		config.estimate_biases = false;
 		ROS_INFO("Start collecting IMU data.");
 	}
 }
@@ -148,13 +151,14 @@ int main(int argc, char **argv) {
 
 	dv_ros_imu_bias::BiasesEstimationConfig initialSettings = dv_ros_imu_bias::BiasesEstimationConfig::__getDefault__();
 	initialSettings.variance_threshold                      = 0.1;
+	initialSettings.gravity_range                           = 0.25;
 	initialSettings.collection_duration                     = 1.0;
 
 	dynamic_reconfigure::Server<dv_ros_imu_bias::BiasesEstimationConfig>::CallbackType f;
 	f = boost::bind(&reconfigureBias, _1, _2);
 	dynamicReconfigure.setCallback(f);
 
-	imuSubscriber       = nodeHandler.subscribe("imu", 10, &imuCallback);
+	imuSubscriber = nodeHandler.subscribe("imu", 10, &imuCallback);
 
 	ros::spin();
 	return EXIT_SUCCESS;

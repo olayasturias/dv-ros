@@ -3,10 +3,12 @@
           required="true">
         <rosparam param="unbiasedImuData">false</rosparam>
         <rosparam param="transformImuToCameraFrame">false</rosparam>
-<!--        <rosparam param="cameraCalibrationFilePath">/home/vincenzo/dv_calibration_2022-04-22T09-32-29Z/calibration.json</rosparam>-->
+        <!-- A calibration file is needed to store the biases values. -->
+        <rosparam param="cameraCalibrationFilePath">CALIBRATION_FILE_PATH</rosparam>
     </node>
 
-    <node pkg="dv_ros_imu_bias" type="bias_estimation_node" name="bias_estimation_node" clear_params="true" output="screen"
+    <node pkg="dv_ros_imu_bias" type="bias_estimation_node" name="bias_estimation_node" clear_params="true"
+          output="screen"
           required="false">
         <remap from="/bias_estimation_node/imu" to="/capture_node/imu"/>
     </node>

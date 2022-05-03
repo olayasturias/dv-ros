@@ -232,6 +232,7 @@ void CaptureNode::populateInfoMsg(const dv::camera::CameraGeometry &cameraGeomet
 }
 
 bool CaptureNode::setCameraInfo(sensor_msgs::SetCameraInfo::Request &req, sensor_msgs::SetCameraInfo::Response &rsp) {
+	// Set camera info is usually called from a camera calibration pipeline, like the ros camera calibration.
 	mCameraInfoMsg = req.camera_info;
 
 	try {
@@ -249,10 +250,13 @@ bool CaptureNode::setCameraInfo(sensor_msgs::SetCameraInfo::Request &req, sensor
 
 bool CaptureNode::setImuBiases(
 	dv_ros_capture::SetImuBiases::Request &req, dv_ros_capture::SetImuBiases::Response &rsp) {
+	// Set Imu biases is called by a node that computes the biases. Hence, the camera calibration is not modified,
+	// only the Imu biases are changed.
+
 	ROS_INFO("Setting IMU biases...");
 	if (mParams.unbiasedImuData) {
-		ROS_WARN("The IMU data out of this node are unbiased, hence the biases calculation is wrong Not storing "
-				 "computed biases.");
+		ROS_ERROR("The IMU data out of this node are unbiased, hence the biases calculation is wrong. Not storing "
+				  "computed biases.");
 		return false;
 	}
 
@@ -265,13 +269,15 @@ bool CaptureNode::setImuBiases(
 	mGyroBiases.z() = req.gyroBiases.z;
 
 	try {
-		auto calibPath     = saveCalibration();
+		updateCalibrationFiles();
 		rsp.success        = true;
-		rsp.status_message = fmt::format("Calibration stored successfully in {0}.", calibPath);
+		rsp.status_message = fmt::format("IMU biases stored in calibration file.");
+		ROS_INFO("Unbiasing output IMU messages.");
+		mParams.unbiasedImuData = true;
 	}
 	catch (const std::exception &e) {
 		rsp.success        = false;
-		rsp.status_message = fmt::format("Error storing camera calibration.");
+		rsp.status_message = fmt::format("Error storing Imu biases calibration.");
 	}
 
 	return true;
@@ -310,7 +316,7 @@ fs::path CaptureNode::getActiveCalibrationPath() const {
 		"{0}/.dv_camera/camera_calibration/{1}/active_calibration.json", std::getenv("HOME"), cameraName);
 }
 
-fs::path CaptureNode::generateActiveCalibrationFile() const {
+void CaptureNode::generateActiveCalibrationFile() {
 	ROS_INFO("Generation active calibration file...");
 	std::string cameraName = mReader.getCameraName();
 	fs::path calibPath     = fmt::format("{0}/.dv_camera/camera_calibration/{1}", std::getenv("HOME"), cameraName);
@@ -320,10 +326,39 @@ fs::path CaptureNode::generateActiveCalibrationFile() const {
 	calibPath     = getActiveCalibrationPath();
 	auto calibSet = generateCalibrationSet();
 	calibSet.writeToFile(calibPath);
-	return calibPath;
 }
 
-fs::path CaptureNode::saveCalibration() const {
+void CaptureNode::updateCalibrationFiles() {
+	const auto activeCalibPath = getActiveCalibrationPath();
+	if (!mParams.cameraCalibrationFilePath.empty() && mParams.cameraCalibrationFilePath != activeCalibPath) {
+		ROS_INFO_STREAM(fmt::format("Updating user calibration file {0}", mParams.cameraCalibrationFilePath));
+		auto calibSet                = dv::camera::CalibrationSet::LoadFromFile(mParams.cameraCalibrationFilePath);
+		const std::string cameraName = mReader.getCameraName();
+		if (auto imuCalib = calibSet.getImuCalibrationByName(cameraName); imuCalib.has_value()) {
+			imuCalib->accOffsetAvg.x = mAccBiases.x();
+			imuCalib->accOffsetAvg.y = mAccBiases.y();
+			imuCalib->accOffsetAvg.z = mAccBiases.z();
+
+			imuCalib->omegaOffsetAvg.x = mGyroBiases.x();
+			imuCalib->omegaOffsetAvg.y = mGyroBiases.y();
+			imuCalib->omegaOffsetAvg.z = mGyroBiases.z();
+
+			const auto calib = *imuCalib;
+			calibSet.setImuCalibration(imuCalib->name, calib);
+		}
+		else {
+			ROS_WARN("IMU data not available for the calibration file.");
+		}
+		calibSet.writeToFile(mParams.cameraCalibrationFilePath);
+		fs::copy_file(mParams.cameraCalibrationFilePath, activeCalibPath, fs::copy_options::overwrite_existing);
+	}
+	else {
+		ROS_INFO("Updating active calibration file...");
+		generateCalibrationSet().writeToFile(activeCalibPath);
+	}
+}
+
+fs::path CaptureNode::newCalibrationPath() const {
 	std::string cameraName = mReader.getCameraName();
 	fs::path calibPath     = fmt::format("{0}/.dv_camera/camera_calibration/{1}", std::getenv("HOME"), cameraName);
 	if (!fs::is_directory(calibPath) || !fs::exists(calibPath)) {
@@ -333,7 +368,11 @@ fs::path CaptureNode::saveCalibration() const {
 	auto dt   = std::chrono::time_point<std::chrono::system_clock>(dv::Duration(dv::now()));
 	auto date = fmt::format("{:%Y_%m_%d_%H_%M_%S}", dt);
 	calibPath = fmt::format("{0}/calibration_camera_{1}_{2}.json", calibPath, cameraName, date);
+	return calibPath;
+}
 
+fs::path CaptureNode::saveCalibration() const {
+	auto calibPath = newCalibrationPath();
 	generateCalibrationSet().writeToFile(calibPath);
 
 	fs::copy_file(calibPath, getActiveCalibrationPath(), fs::copy_options::overwrite_existing);
@@ -393,6 +432,9 @@ dv::camera::CalibrationSet CaptureNode::generateCalibrationSet() const {
 		imuCalib.omegaOffsetAvg.z = mGyroBiases.z();
 
 		calibSet.addImuCalibration(imuCalib);
+	}
+	else {
+		ROS_WARN("IMU data not available for the calibration file.");
 	}
 	return calibSet;
 }

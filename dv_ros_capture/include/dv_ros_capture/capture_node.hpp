@@ -188,10 +188,33 @@ private:
 		return imu;
 	}
 
+	/**
+	 * Generate the CalibrationSet with the data from the Set Camera Info and the set IMU services.
+	 * @return dv::camera::CalibrationSet
+	 */
 	[[nodiscard]] dv::camera::CalibrationSet generateCalibrationSet() const;
+
+	/**
+	 * Stores the calibration data into a new file.
+	 * @return path to the new file.
+	 */
 	[[nodiscard]] fs::path saveCalibration() const;
 
-	fs::path generateActiveCalibrationFile() const;
+	/**
+	 * Generate new file path with date and time information.
+	 * @return file path
+	 */
+	[[nodiscard]] fs::path newCalibrationPath() const;
+
+	/**
+	 * Update the Imu biases of the existing camera calibration file.
+	 */
+	void updateCalibrationFiles();
+
+	/**
+	 *	Create an active calibration file, when no calibration exists.
+	 */
+	void generateActiveCalibrationFile();
 
 	[[nodiscard]] fs::path getActiveCalibrationPath() const;
 };
