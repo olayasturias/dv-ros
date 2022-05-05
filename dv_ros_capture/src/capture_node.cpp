@@ -74,6 +74,7 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 			throw dv::exceptions::InvalidArgument<std::string>(
 				"User supplied calibration file does not exist!", mParams.cameraCalibrationFilePath);
 		}
+		ROS_INFO_STREAM(fmt::format("Loading calibration data from {0}...", mParams.cameraCalibrationFilePath));
 		// update/generate active calibration file from used passed camera calibration.
 		fs::copy_file(mParams.cameraCalibrationFilePath, calibrationPath, fs::copy_options::overwrite_existing);
 	}

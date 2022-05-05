@@ -216,6 +216,10 @@ private:
 	 */
 	void generateActiveCalibrationFile();
 
+	/**
+	 * Get the path to the active calibration file.
+	 * @return fs::path
+	 */
 	[[nodiscard]] fs::path getActiveCalibrationPath() const;
 };
 
