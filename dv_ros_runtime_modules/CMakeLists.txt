@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(dv_ros_runtime_modules VERSION 1.4.0)
+project(dv_ros_runtime_modules VERSION 1.1.0)
 
 find_package(catkin REQUIRED
         COMPONENTS
@@ -28,7 +28,7 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 FIND_PACKAGE(dv 1.5)
 IF(NOT dv_FOUND)
 	# Not found, falling back to legacy search
-	FIND_PACKAGE(dv-processing 1.3 REQUIRED)
+	FIND_PACKAGE(dv-processing 1.4.0 REQUIRED)
 	INCLUDE(dv-modules)
 	DV_MODULE_SETUP()
 	LIST(APPEND DV_LIBRARIES dv::processing)

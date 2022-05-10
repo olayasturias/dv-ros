@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(dv_ros_tracker VERSION 1.4.0)
+project(dv_ros_tracker VERSION 1.1.0)
 
 find_package(catkin REQUIRED COMPONENTS
         roscpp
@@ -12,7 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
         dv_ros_capture
         )
 
-find_package(dv-processing 1.4 REQUIRED)
+find_package(dv-processing 1.4.0 REQUIRED)
 
 add_message_files(
         FILES

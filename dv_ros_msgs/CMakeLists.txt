@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(dv_ros_msgs VERSION 1.4.0)
+project(dv_ros_msgs VERSION 1.1.0)
 
 find_package(catkin REQUIRED COMPONENTS
         roscpp
