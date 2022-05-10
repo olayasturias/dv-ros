@@ -28,7 +28,7 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 FIND_PACKAGE(dv 1.5)
 IF(NOT dv_FOUND)
 	# Not found, falling back to legacy search
-	FIND_PACKAGE(dv-processing 1.4 REQUIRED)
+	FIND_PACKAGE(dv-processing 1.3 REQUIRED)
 	INCLUDE(dv-modules)
 	DV_MODULE_SETUP()
 	LIST(APPEND DV_LIBRARIES dv::processing)
