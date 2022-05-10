@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
-project(dv_ros_capture)
+project(dv_ros_capture VERSION 1.4.0)
 
-find_package(dv-processing 1.3 REQUIRED)
+find_package(dv-processing 1.4 REQUIRED)
 find_package(catkin REQUIRED COMPONENTS
         roscpp
         std_msgs

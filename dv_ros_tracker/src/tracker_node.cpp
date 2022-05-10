@@ -13,6 +13,8 @@ using namespace std::chrono_literals;
 TrackerNode::TrackerNode(ros::NodeHandle &nodeHandle) : mNodeHandle(nodeHandle) {
 	// Publishers
 	mTimedKeypointArrayPublisher = mNodeHandle.advertise<TimedKeypointArrayMessage>("keypoints", 100);
+	mTimedKeypointUndistortedArrayPublisher
+		= mNodeHandle.advertise<TimedKeypointArrayMessage>("keypointsUndistorted", 100);
 
 	// Read the parameters
 	mLucasKanadeConfig.maskedFeatureDetect
@@ -143,8 +145,16 @@ void TrackerNode::cameraInfoCallback(const dv_ros_msgs::CameraInfoMessage::Const
 		mCameraCalibration.distortion.push_back(static_cast<float>(d));
 	}
 
-	// TODO: dv::camera::calibrations::stringToDistortionModel(msgPtr->distortion_model.c_str());
-	mCameraCalibration.distortionModel = dv::camera::DistortionModel::RadTan;
+	if (msgPtr->distortion_model == "fisheye") {
+		mCameraCalibration.distortionModel = dv::camera::DistortionModel::Equidistant;
+	}
+	else if (msgPtr->distortion_model == "plumb_bob") {
+		mCameraCalibration.distortionModel = dv::camera::DistortionModel::RadTan;
+	}
+	else {
+		throw dv::exceptions::InvalidArgument<dv_ros_msgs::CameraInfoMessage::_distortion_model_type>(
+			"Unknown camera model.", msgPtr->distortion_model);
+	}
 	mCameraCalibration.focalLength    = cv::Point2f(static_cast<float>(msgPtr->K[0]), static_cast<float>(msgPtr->K[4]));
 	mCameraCalibration.principalPoint = cv::Point2f(static_cast<float>(msgPtr->K[2]), static_cast<float>(msgPtr->K[5]));
 	mCameraInitialized                = true;
@@ -328,10 +338,22 @@ void TrackerNode::pushTransformToTracker(const dv::kinematics::Transformationf &
 	}
 }
 
+dv::cvector<dv::TimedKeyPoint> TrackerNode::undistortKeypoints(const dv::cvector<dv::TimedKeyPoint> &keypoints) {
+	static const auto mCamGeom                          = mCameraCalibration.getCameraGeometry();
+	dv::cvector<dv::TimedKeyPoint> undistortedKeypoints = keypoints;
+	for (auto &keypoint : undistortedKeypoints) {
+		keypoint.pt = mCamGeom.undistort<dv::Point2f>(keypoint.pt);
+	}
+	return undistortedKeypoints;
+}
+
 bool TrackerNode::runTracking() {
 	if (auto tracks = tracker->runTracking(); tracks != nullptr) {
 		frameTracks.accept(tracks);
 		mTimedKeypointArrayPublisher.publish(toRosTimedKeypointArrayMessage(tracks->timestamp, tracks->keypoints));
+
+		mTimedKeypointUndistortedArrayPublisher.publish(
+			toRosTimedKeypointArrayMessage(tracks->timestamp, undistortKeypoints(tracks->keypoints)));
 		return true;
 	}
 	return false;

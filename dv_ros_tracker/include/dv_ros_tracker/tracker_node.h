@@ -85,6 +85,7 @@ private:
 	ros::Subscriber mTfSubscriber;
 
 	ros::Publisher mTimedKeypointArrayPublisher;
+	ros::Publisher mTimedKeypointUndistortedArrayPublisher;
 	ros::Publisher mTracksPreviewPublisher;
 	ros::Publisher mTracksEventsFramesPublisher;
 
@@ -145,6 +146,8 @@ private:
 	void pushFrameToTracker(const dv::Frame &frame);
 
 	void pushTransformToTracker(const dv::kinematics::Transformationf &transform);
+
+	dv::cvector<dv::TimedKeyPoint> undistortKeypoints(const dv::cvector<dv::TimedKeyPoint> &keypoints);
 
 	bool runTracking();
 
