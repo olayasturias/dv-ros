@@ -24,8 +24,17 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
         /usr/local/${CMAKE_INSTALL_DATAROOTDIR}/dv /usr/local/share/dv)
 
 # Basic setup
-INCLUDE(dv-modules)
-DV_MODULE_SETUP()
+# Looking for dv-runtime version 1.5+
+FIND_PACKAGE(dv 1.5)
+IF(NOT dv_FOUND)
+	# Not found, falling back to legacy search
+	FIND_PACKAGE(dv-processing 1.4 REQUIRED)
+	INCLUDE(dv-modules)
+	DV_MODULE_SETUP()
+	LIST(APPEND DV_LIBRARIES dv::processing)
+ELSE()
+	SET(DV_LIBRARIES dv::sdk)
+ENDIF()
 
 include_directories(${catkin_INCLUDE_DIRS} ${DV_INCLUDE_DIRS})
 # Set full RPATH, modules are libraries for DV
