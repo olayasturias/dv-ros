@@ -76,6 +76,12 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 		}
 		ROS_INFO_STREAM(fmt::format("Loading calibration data from {0}...", mParams.cameraCalibrationFilePath));
 		// update/generate active calibration file from used passed camera calibration.
+		std::string cameraName = mReader.getCameraName();
+		fs::path calibFolderPath     = fmt::format("{0}/.dv_camera/camera_calibration/{1}", std::getenv("HOME"), cameraName);
+		if (!fs::is_directory(calibFolderPath) || !fs::exists(calibFolderPath)) {
+			fs::create_directories(calibFolderPath);
+		}
+
 		fs::copy_file(mParams.cameraCalibrationFilePath, calibrationPath, fs::copy_options::overwrite_existing);
 	}
 
