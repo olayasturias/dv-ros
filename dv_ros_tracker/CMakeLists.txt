@@ -12,7 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
         dv_ros_capture
         )
 
-find_package(dv-processing REQUIRED)
+find_package(dv-processing 1.3.0 REQUIRED)
 
 add_message_files(
         FILES

@@ -14,7 +14,8 @@ cameraFrameName: "camera"
 imuFrameName: "imu"
 # if true, the IMU accelerations and velocities are expressed in the camera frame
 transformImuToCameraFrame: true
-# If true, publish unbiased IMU data
+# If true, publish unbiased IMU data, that is IMU bias values that are read from
+# calibration file will be subtracted out of the raw IMU stream
 unbiasedImuData: true
 # Path to the camera calibration file
 cameraCalibrationFilePath: ""

@@ -2,4 +2,3 @@
 !.gitignore
 !.clang-format
 *build*
-config/dynamic.yaml

@@ -77,7 +77,8 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 		ROS_INFO_STREAM(fmt::format("Loading calibration data from {0}...", mParams.cameraCalibrationFilePath));
 		// update/generate active calibration file from used passed camera calibration.
 		std::string cameraName = mReader.getCameraName();
-		fs::path calibFolderPath     = fmt::format("{0}/.dv_camera/camera_calibration/{1}", std::getenv("HOME"), cameraName);
+		fs::path calibFolderPath
+			= fmt::format("{0}/.dv_camera/camera_calibration/{1}", std::getenv("HOME"), cameraName);
 		if (!fs::is_directory(calibFolderPath) || !fs::exists(calibFolderPath)) {
 			fs::create_directories(calibFolderPath);
 		}
@@ -324,7 +325,7 @@ fs::path CaptureNode::getActiveCalibrationPath() const {
 }
 
 void CaptureNode::generateActiveCalibrationFile() {
-	ROS_INFO("Generation active calibration file...");
+	ROS_INFO("Generating active calibration file...");
 	std::string cameraName = mReader.getCameraName();
 	fs::path calibPath     = fmt::format("{0}/.dv_camera/camera_calibration/{1}", std::getenv("HOME"), cameraName);
 	if (!fs::is_directory(calibPath) || !fs::exists(calibPath)) {
@@ -351,7 +352,7 @@ void CaptureNode::updateCalibrationFiles() {
 			imuCalib->omegaOffsetAvg.z = mGyroBiases.z();
 
 			const auto calib = *imuCalib;
-			calibSet.setImuCalibration(imuCalib->name, calib);
+			calibSet.updateImuCalibration(imuCalib->name, calib);
 		}
 		else {
 			ROS_WARN("IMU data not available for the calibration file.");
@@ -387,7 +388,7 @@ fs::path CaptureNode::saveCalibration() const {
 }
 
 dv::camera::CalibrationSet CaptureNode::generateCalibrationSet() const {
-	ROS_INFO("Generation calibration set...");
+	ROS_INFO("Generating calibration set...");
 	std::string cameraName = mReader.getCameraName();
 	auto calib             = dv::camera::calibrations::CameraCalibration();
 	calib.name             = cameraName;
@@ -395,10 +396,10 @@ dv::camera::CalibrationSet CaptureNode::generateCalibrationSet() const {
 	for (const auto &d : mCameraInfoMsg.D) {
 		calib.distortion.push_back(static_cast<float>(d));
 	}
-	if (mCameraInfoMsg.distortion_model.c_str() == sensor_msgs::distortion_models::PLUMB_BOB) {
+	if (static_cast<std::string>(mCameraInfoMsg.distortion_model) == sensor_msgs::distortion_models::PLUMB_BOB) {
 		calib.distortionModel = dv::camera::DistortionModel::RadTan;
 	}
-	else if (mCameraInfoMsg.distortion_model.c_str() == sensor_msgs::distortion_models::EQUIDISTANT) {
+	else if (static_cast<std::string>(mCameraInfoMsg.distortion_model) == sensor_msgs::distortion_models::EQUIDISTANT) {
 		calib.distortionModel = dv::camera::DistortionModel::Equidistant;
 	}
 	else {
