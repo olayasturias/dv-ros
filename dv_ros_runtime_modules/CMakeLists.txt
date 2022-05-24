@@ -1,80 +1,69 @@
 cmake_minimum_required(VERSION 3.14)
 project(dv_ros_runtime_modules VERSION 1.1.0)
 
-find_package(catkin REQUIRED
-        COMPONENTS
-        pluginlib
-        roscpp
-        roslib
-        dv_ros_msgs
-        dv_ros_messaging
-)
+find_package(catkin REQUIRED COMPONENTS pluginlib roscpp roslib dv_ros_msgs
+                                        dv_ros_messaging)
 
 catkin_package(
-        # INCLUDE_DIRS include
-        LIBRARIES ${PROJECT_NAME}
-        DEPENDS roscpp roslib dv_ros_msgs dv_ros_messaging
-)
+  # INCLUDE_DIRS include
+  LIBRARIES
+  ${PROJECT_NAME}
+  DEPENDS
+  roscpp
+  roslib
+  dv_ros_msgs
+  dv_ros_messaging)
 
-INCLUDE(GNUInstallDirs)
+include(GNUInstallDirs)
 
-SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
-        ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR}/dv /usr/${CMAKE_INSTALL_DATAROOTDIR}/dv
-        ${CMAKE_INSTALL_PREFIX}/share/dv /usr/share/dv
-        /usr/local/${CMAKE_INSTALL_DATAROOTDIR}/dv /usr/local/share/dv)
+set(CMAKE_MODULE_PATH
+    ${CMAKE_MODULE_PATH}
+    ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR}/dv
+    /usr/${CMAKE_INSTALL_DATAROOTDIR}/dv
+    ${CMAKE_INSTALL_PREFIX}/share/dv
+    /usr/share/dv
+    /usr/local/${CMAKE_INSTALL_DATAROOTDIR}/dv
+    /usr/local/share/dv)
 
-# Basic setup
-# Looking for dv-runtime version 1.5+
-FIND_PACKAGE(dv 1.5)
-IF(NOT dv_FOUND)
-	# Not found, falling back to legacy search
-	FIND_PACKAGE(dv-processing 1.4.0 REQUIRED)
-	INCLUDE(dv-modules)
-	DV_MODULE_SETUP()
-	LIST(APPEND DV_LIBRARIES dv::processing)
-ELSE()
-	SET(DV_LIBRARIES dv::sdk)
-ENDIF()
+# Basic setup Looking for dv-runtime version 1.5+
+find_package(dv 1.5)
+if(NOT dv_FOUND)
+  # Not found, falling back to legacy search
+  find_package(dv-processing 1.4.0 REQUIRED)
+  include(dv-modules)
+  dv_module_setup()
+  list(APPEND DV_LIBRARIES dv::processing)
+else()
+  set(DV_LIBRARIES dv::sdk)
+endif()
 
 include_directories(${catkin_INCLUDE_DIRS} ${DV_INCLUDE_DIRS})
 # Set full RPATH, modules are libraries for DV
-SET(CMAKE_INSTALL_RPATH ${DV_MODULES_DIR})
+set(CMAKE_INSTALL_RPATH ${DV_MODULES_DIR})
 
-ADD_LIBRARY(ImageBridge SHARED src/RosImageBridge.cpp)
+add_library(ImageBridge SHARED src/RosImageBridge.cpp)
 add_dependencies(ImageBridge ${catkin_EXPORTED_TARGETS})
 
-SET_TARGET_PROPERTIES(ImageBridge
-        PROPERTIES
-        PREFIX "ros_"
-        )
-TARGET_LINK_LIBRARIES(ImageBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})
+set_target_properties(ImageBridge PROPERTIES PREFIX "ros_")
+target_link_libraries(ImageBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})
 
-ADD_LIBRARY(ImuBridge SHARED src/RosIMUBridge.cpp)
+add_library(ImuBridge SHARED src/RosIMUBridge.cpp)
 add_dependencies(ImuBridge ${catkin_EXPORTED_TARGETS})
 
-SET_TARGET_PROPERTIES(ImuBridge
-        PROPERTIES
-        PREFIX "ros_"
-        )
+set_target_properties(ImuBridge PROPERTIES PREFIX "ros_")
 
-TARGET_LINK_LIBRARIES(ImuBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})
+target_link_libraries(ImuBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})
 
-ADD_LIBRARY(EventBridge SHARED src/RosEventBridge.cpp src/RosEventBridge.h)
+add_library(EventBridge SHARED src/RosEventBridge.cpp src/RosEventBridge.h)
 add_dependencies(EventBridge ${catkin_EXPORTED_TARGETS})
 
-SET_TARGET_PROPERTIES(EventBridge
-        PROPERTIES
-        PREFIX "ros_"
-        )
+set_target_properties(EventBridge PROPERTIES PREFIX "ros_")
 
-TARGET_LINK_LIBRARIES(EventBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})
+target_link_libraries(EventBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})
 
-ADD_LIBRARY(TriggerBridge SHARED src/RosTriggerBridge.cpp)
+add_library(TriggerBridge SHARED src/RosTriggerBridge.cpp)
 add_dependencies(TriggerBridge ${catkin_EXPORTED_TARGETS})
 
-SET_TARGET_PROPERTIES(TriggerBridge
-        PROPERTIES
-        PREFIX "ros_"
-        )
+set_target_properties(TriggerBridge PROPERTIES PREFIX "ros_")
 
-TARGET_LINK_LIBRARIES(TriggerBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})
+target_link_libraries(TriggerBridge PRIVATE ${DV_LIBRARIES} ${catkin_LIBRARIES})

@@ -33,7 +33,7 @@ E.g. if you use sensor_msgs::Image type, just wrap the type declaration with the
 // Variable declaration
 DV_ROS_MSGS(sensor_msgs::Image) image;
 
-// Or using an alias for the type 
+// Or using an alias for the type
 using ImageMessage = DV_ROS_MSGS(sensor_msgs::Image);
 ImageMessage image;
 ```
@@ -41,8 +41,5 @@ ImageMessage image;
 The macro command will replace the `std::allocator` with `boost::container::allocator` instead, which has compatible
 API and will allow the code to compile with C++20 features.
 
-The header will also include modified headers for dynamic reconfiguration compatibility, so this feature can also be 
+The header will also include modified headers for dynamic reconfiguration compatibility, so this feature can also be
 used without any modifications.
-
-
-

@@ -1,6 +1,8 @@
 #ifndef __DYNAMIC_RECONFIGURE__CONFIG_TOOLS__
 #define __DYNAMIC_RECONFIGURE__CONFIG_TOOLS__
 
+#include <dv_ros_messaging/messaging.hpp>
+
 #include "Config.h"
 #include "ConfigDescription.h"
 #include "Group.h"
@@ -8,7 +10,6 @@
 #include "Reconfigure.h"
 
 #include <cstring>
-#include <dv_ros_messaging/messaging.hpp>
 #include <string>
 #include <vector>
 

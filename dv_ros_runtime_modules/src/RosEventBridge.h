@@ -1,17 +1,16 @@
 #pragma once
 #include <dv_ros_messaging/messaging.hpp>
 
-#include <ros/ros.h>
-
-#include <dv-sdk/module.hpp>
-#include <regex>
-
 #include <dv_ros_msgs/Event.h>
 #include <dv_ros_msgs/EventArray.h>
 
 #include <boost/circular_buffer.hpp>
 #include <opencv2/opencv.hpp>
 
+#include <ros/ros.h>
+
+#include <dv-sdk/module.hpp>
+#include <regex>
 #include <sensor_msgs/CameraInfo.h>
 
 class RosEventBridge : public dv::ModuleBase {
