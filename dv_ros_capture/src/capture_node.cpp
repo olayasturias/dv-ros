@@ -352,7 +352,7 @@ void CaptureNode::updateCalibrationFiles() {
 			imuCalib->omegaOffsetAvg.z = mGyroBiases.z();
 
 			const auto calib = *imuCalib;
-			calibSet.updateImuCalibration(imuCalib->name, calib);
+			calibSet.updateImuCalibration(calib);
 		}
 		else {
 			ROS_WARN("IMU data not available for the calibration file.");
