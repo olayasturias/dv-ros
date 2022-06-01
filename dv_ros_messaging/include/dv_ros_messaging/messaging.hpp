@@ -222,8 +222,8 @@ using TriggerMessage = DV_ROS_MSGS(dv_ros_msgs::Trigger);
 	if (message.events.empty()) {
 		return {};
 	}
-	uint32_t seconds = message.events.front().ts.sec;
-	int64_t timestamp = static_cast<int64_t>(seconds) * 1'000'000;
+	uint32_t seconds                             = message.events.front().ts.sec;
+	int64_t timestamp                            = static_cast<int64_t>(seconds) * 1'000'000;
 	std::shared_ptr<dv::EventPacket> eventPacket = std::make_shared<dv::EventPacket>();
 	eventPacket->elements.reserve(message.events.size());
 	for (const auto &event : message.events) {

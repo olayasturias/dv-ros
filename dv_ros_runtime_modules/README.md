@@ -32,4 +32,3 @@ dv-runtime
 * ROS Image bridge - Simple image frame publisher.
 * ROS Imu Bridge - Publishes IMU messages.
 * ROS Trigger Bridge - Publishes trigger messages.
-

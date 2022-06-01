@@ -1,6 +1,6 @@
-# DV ROS 
+# DV ROS
 
-ROS drivers and sample nodes for iniVation cameras and DV software infrastructure. 
+ROS drivers and sample nodes for iniVation cameras and DV software infrastructure.
 
 
 ## Installation on Ubuntu OS
@@ -45,8 +45,8 @@ You should see a preview of events coming from the iniVation camera connected to
 
 ## Compatibility
 
-The message types for events are designed to be compatible with the types available in 
-[rpg_dvs_ros](https://github.com/uzh-rpg/rpg_dvs_ros) repository, so the communication is possible with all nodes 
+The message types for events are designed to be compatible with the types available in
+[rpg_dvs_ros](https://github.com/uzh-rpg/rpg_dvs_ros) repository, so the communication is possible with all nodes
 developed using those event message types (Event and EventArray). The `capture_node` is designed to be a more general
 node replacing the individual nodes for each type of iniVation camera (`davis_ros_driver`, `dvs_ros_driver`, and `dvxplorer_ros_driver`).
 

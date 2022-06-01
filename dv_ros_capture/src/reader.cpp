@@ -130,7 +130,8 @@ const std::unique_ptr<dv::io::MonoCameraRecording> &Reader::getMonoCameraRecordi
 std::string Reader::getCameraName() const {
 	if (mCameraCapture) {
 		return cameraCapturePtr->getCameraName();
-	} else {
+	}
+	else {
 		return monoCameraRecordingPtr->getCameraName();
 	}
 }

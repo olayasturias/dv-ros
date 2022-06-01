@@ -200,10 +200,21 @@ CaptureNode::CaptureNode(std::shared_ptr<ros::NodeHandle> &nodeHandle, const dv_
 }
 
 void CaptureNode::populateInfoMsg(const dv::camera::CameraGeometry &cameraGeometry) {
-	mCameraInfoMsg.width            = cameraGeometry.getResolution().width;
-	mCameraInfoMsg.height           = cameraGeometry.getResolution().height;
-	mCameraInfoMsg.distortion_model = "plumb_bob";
-
+	mCameraInfoMsg.width  = cameraGeometry.getResolution().width;
+	mCameraInfoMsg.height = cameraGeometry.getResolution().height;
+	if (cameraGeometry.getDistortionModel() == dv::camera::DistortionModel::Equidistant) {
+		mCameraInfoMsg.distortion_model = "fisheye";
+	}
+	else if (cameraGeometry.getDistortionModel() == dv::camera::DistortionModel::RadTan) {
+		mCameraInfoMsg.distortion_model = "plumb_bob";
+		if (mCameraInfoMsg.D.size() < 5) {
+			mCameraInfoMsg.D.resize(5, 0.0);
+		}
+	}
+	else {
+		throw dv::exceptions::InvalidArgument<dv::camera::DistortionModel>(
+			"Unknown camera model.", cameraGeometry.getDistortionModel());
+	}
 	auto cx               = cameraGeometry.getCentralPoint().x;
 	auto cy               = cameraGeometry.getCentralPoint().y;
 	auto fx               = cameraGeometry.getFocalLength().x;
@@ -211,9 +222,7 @@ void CaptureNode::populateInfoMsg(const dv::camera::CameraGeometry &cameraGeomet
 	mCameraInfoMsg.K      = {fx, 0, cx, 0, fy, cy, 0, 0, 1};
 	const auto distortion = cameraGeometry.getDistortion();
 	mCameraInfoMsg.D.assign(distortion.begin(), distortion.end());
-	if (mCameraInfoMsg.D.size() < 5) {
-		mCameraInfoMsg.D.resize(5, 0.0);
-	}
+
 	mCameraInfoMsg.R = {1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0};
 	mCameraInfoMsg.P = {fx, 0, cx, 0, 0, fy, cy, 0, 0, 0, 1.0, 0};
 }

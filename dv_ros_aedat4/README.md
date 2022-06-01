@@ -1,6 +1,6 @@
 # DV ROS Aedat4
 
-This project provides a stand-alone executable for converting aedat4 files into rosbags. 
+This project provides a stand-alone executable for converting aedat4 files into rosbags.
 
 ## Usage
 
@@ -13,9 +13,8 @@ Options:
   -i,--input TEXT:FILE REQUIRED
                               Input aedat4 file
   -o,--output TEXT            Output aedat4 file
-  -n,--namespace [/recording] 
+  -n,--namespace [/recording]
                               Topic namespace
-  -f,--force-overwrite        
+  -f,--force-overwrite
   -v,--verbose
 ```
-

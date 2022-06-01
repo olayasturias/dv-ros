@@ -119,7 +119,8 @@ private:
 	int64_t mImuTimeOffset = 0;
 	std::atomic<int64_t> mCurrentSeek;
 	std::optional<TransformsMessage> mImuToCamTransforms = std::nullopt;
-	dv::kinematics::Transformationf mImuToCamTransform;
+	dv::kinematics::Transformationf mImuToCamTransform
+		= dv::kinematics::Transformationf(0, Eigen::Vector3f::Zero(), Eigen::Quaternion<float>::Identity());
 
 	std::unique_ptr<dynamic_reconfigure::Server<dv_ros_capture::DAVISConfig>> davisColorServer    = nullptr;
 	std::unique_ptr<dynamic_reconfigure::Server<dv_ros_capture::DVXplorerConfig>> dvxplorerServer = nullptr;
@@ -168,7 +169,7 @@ private:
 	 * @return ROS Imu message in camera reference frame
 	 */
 	[[nodiscard]] inline dv_ros_msgs::ImuMessage transformImuFrame(dv_ros_msgs::ImuMessage &&imu) {
-		if (mParams.transformImuToCameraFrame && mImuToCamTransforms.has_value()) {
+		if (mParams.transformImuToCameraFrame) {
 			const Eigen::Vector3<double> resW
 				= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.angular_velocity);
 			imu.angular_velocity.x = resW.x();
