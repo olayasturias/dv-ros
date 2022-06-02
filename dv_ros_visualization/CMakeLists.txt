@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(dv_ros_visualization)
+project(dv_ros_visualization VERSION 1.1.0)
 
 find_package(
   catkin REQUIRED
@@ -12,7 +12,7 @@ find_package(
              dv_ros_msgs
              dv_ros_messaging)
 
-find_package(dv-processing 1.3.0 REQUIRED)
+find_package(dv-processing 1.4.0 REQUIRED)
 
 catkin_package(CATKIN_DEPENDS message_runtime roscpp std_msgs sensor_msgs
                dv_ros_msgs)

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(dv_ros_accumulation)
+project(dv_ros_accumulation VERSION 1.1.0)
 
 find_package(
   catkin REQUIRED
@@ -14,7 +14,7 @@ find_package(
 
 generate_dynamic_reconfigure_options(cfg/Accumulator.cfg cfg/EdgeMap.cfg)
 
-find_package(dv-processing 1.3.0 REQUIRED)
+find_package(dv-processing 1.4.0 REQUIRED)
 
 catkin_package(
   CATKIN_DEPENDS

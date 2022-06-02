@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(dv_ros_aedat4)
+project(dv_ros_aedat4 VERSION 1.1.0)
 
 # Git submodule automatic update support.
 find_package(Git QUIET)
@@ -35,7 +35,7 @@ find_package(
              dv_ros_msgs
              dv_ros_messaging)
 
-find_package(dv-processing 1.3.0 REQUIRED)
+find_package(dv-processing 1.4.0 REQUIRED)
 
 add_subdirectory(thirdparty/CLI11)
 

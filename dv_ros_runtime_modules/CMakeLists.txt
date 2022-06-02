@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(dv_ros_runtime_modules VERSION 1.3.0)
+project(dv_ros_runtime_modules VERSION 1.1.0)
 
 find_package(catkin REQUIRED COMPONENTS pluginlib roscpp roslib dv_ros_msgs
                                         dv_ros_messaging)
@@ -25,9 +25,17 @@ set(CMAKE_MODULE_PATH
     /usr/local/${CMAKE_INSTALL_DATAROOTDIR}/dv
     /usr/local/share/dv)
 
-# Basic setup
-include(dv-modules)
-dv_module_setup()
+# Basic setup Looking for dv-runtime version 1.5+
+find_package(dv 1.5)
+if(NOT dv_FOUND)
+  # Not found, falling back to legacy search
+  find_package(dv-processing 1.4.0 REQUIRED)
+  include(dv-modules)
+  dv_module_setup()
+  list(APPEND DV_LIBRARIES dv::processing)
+else()
+  set(DV_LIBRARIES dv::sdk)
+endif()
 
 include_directories(${catkin_INCLUDE_DIRS} ${DV_INCLUDE_DIRS})
 # Set full RPATH, modules are libraries for DV

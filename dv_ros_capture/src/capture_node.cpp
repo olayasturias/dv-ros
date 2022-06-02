@@ -215,25 +215,39 @@ void CaptureNode::populateInfoMsg(const dv::camera::CameraGeometry &cameraGeomet
 	mCameraInfoMsg.height = cameraGeometry.getResolution().height;
 
 	const auto distortion = cameraGeometry.getDistortion();
-	mCameraInfoMsg.D.assign(distortion.begin(), distortion.end());
-	if (cameraGeometry.getDistortionModel() == dv::camera::DistortionModel::Equidistant) {
-		mCameraInfoMsg.distortion_model = sensor_msgs::distortion_models::EQUIDISTANT;
-	}
-	else if (cameraGeometry.getDistortionModel() == dv::camera::DistortionModel::RadTan
-			 || cameraGeometry.getDistortionModel() == dv::camera::DistortionModel::None) {
-		mCameraInfoMsg.distortion_model = sensor_msgs::distortion_models::PLUMB_BOB;
-		if (mCameraInfoMsg.D.size() < 5) {
-			mCameraInfoMsg.D.resize(5, 0.0);
+
+	switch (cameraGeometry.getDistortionModel()) {
+		case dv::camera::DistortionModel::Equidistant: {
+			mCameraInfoMsg.distortion_model = sensor_msgs::distortion_models::EQUIDISTANT;
+			mCameraInfoMsg.D.assign(distortion.begin(), distortion.end());
+			break;
 		}
+
+		case dv::camera::DistortionModel::RadTan: {
+			mCameraInfoMsg.distortion_model = sensor_msgs::distortion_models::PLUMB_BOB;
+			mCameraInfoMsg.D.assign(distortion.begin(), distortion.end());
+			if (mCameraInfoMsg.D.size() < 5) {
+				mCameraInfoMsg.D.resize(5, 0.0);
+			}
+			break;
+		}
+
+		case dv::camera::DistortionModel::None: {
+			mCameraInfoMsg.distortion_model = sensor_msgs::distortion_models::PLUMB_BOB;
+			mCameraInfoMsg.D                = {0.0, 0.0, 0.0, 0.0, 0.0};
+			break;
+		}
+
+		default:
+			throw dv::exceptions::InvalidArgument<dv::camera::DistortionModel>(
+				"Unsupported camera distortion model.", cameraGeometry.getDistortionModel());
 	}
-	else {
-		throw dv::exceptions::InvalidArgument<dv::camera::DistortionModel>(
-			"Unknown camera model.", cameraGeometry.getDistortionModel());
-	}
+
 	auto cx          = cameraGeometry.getCentralPoint().x;
 	auto cy          = cameraGeometry.getCentralPoint().y;
 	auto fx          = cameraGeometry.getFocalLength().x;
 	auto fy          = cameraGeometry.getFocalLength().y;
+
 	mCameraInfoMsg.K = {fx, 0, cx, 0, fy, cy, 0, 0, 1};
 	mCameraInfoMsg.R = {1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0};
 	mCameraInfoMsg.P = {fx, 0, cx, 0, 0, fy, cy, 0, 0, 0, 1.0, 0};
@@ -293,7 +307,8 @@ bool CaptureNode::setImuBiases(
 
 bool CaptureNode::setImuInfo(dv_ros_capture::SetImuInfo::Request &req, dv_ros_capture::SetImuInfo::Response &rsp) {
 	mImuTimeOffset = req.imu_info.timeOffsetMicros;
-	DV_ROS_MSGS(geometry_msgs::TransformStamped) stampedTransform;
+	DV_ROS_MSGS(geometry_msgs::TransformStamped)
+	stampedTransform;
 	stampedTransform.transform         = req.imu_info.T_SC;
 	stampedTransform.header.frame_id   = mParams.imuFrameName;
 	stampedTransform.child_frame_id    = mParams.cameraFrameName;

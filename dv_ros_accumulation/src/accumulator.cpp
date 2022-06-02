@@ -37,9 +37,7 @@ int main(int argc, char **argv) {
 				eventQueue.consume_all([&framePublisher, &accumulator](const dv::EventStore &events) {
 					accumulator->accept(events);
 					dv::Frame frame = accumulator->generateFrame();
-					cv::Mat image;
-					frame.image.convertTo(image, CV_8UC1, 255. / accumulator->getMaxPotential());
-					dv_ros_msgs::ImageMessage msg = dv_ros_msgs::toRosImageMessage(image);
+					dv_ros_msgs::ImageMessage msg = dv_ros_msgs::toRosImageMessage(frame.image);
 					msg.header.stamp              = dv_ros_msgs::toRosTime(frame.timestamp);
 					framePublisher.publish(msg);
 				});
