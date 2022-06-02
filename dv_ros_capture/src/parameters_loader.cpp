@@ -56,7 +56,12 @@ void ParametersLoader::printConfiguration() {
 	ROS_INFO_STREAM("Imu enabled: " << (params_.imu ? "yes" : "no"));
 	ROS_INFO_STREAM("Convert IMU to camera frame: " << (params_.transformImuToCameraFrame ? "yes" : "no"));
 	ROS_INFO_STREAM("Triggers enabled: " << (params_.triggers ? "yes" : "no"));
-	ROS_INFO_STREAM("aedat4FilePath: " << params_.aedat4FilePath);
+	if (!params_.aedat4FilePath.empty()) {
+		ROS_INFO_STREAM("aedat4FilePath: " << params_.aedat4FilePath);
+	}
+	if (!params_.cameraName.empty()) {
+		ROS_INFO_STREAM("cameraName: " << params_.aedat4FilePath);
+	}
 	ROS_INFO_STREAM("cameraCalibrationFilePath: " << params_.cameraCalibrationFilePath);
 	ROS_INFO_STREAM("noiseFiltering: " << (params_.noiseFiltering ? "yes" : "no"));
 	ROS_INFO_STREAM("noiseBackgroundActivityTime: " << params_.noiseBATime);
