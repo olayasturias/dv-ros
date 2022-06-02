@@ -27,4 +27,3 @@ cameraName: ""
 noiseFiltering: false
 # Noise filter background activity time threshold in microseconds
 noiseBackgroundActivityTime: 2000
-

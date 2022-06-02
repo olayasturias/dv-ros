@@ -84,7 +84,7 @@ void estimateBias() {
 			"Gravity vector is not aligned, please make sure to place the camera horizontally on a level surface.");
 	}
 
-	accBiases = Eigen::Vector3f(biases[0], biases[1], biases[2]) + earthG;
+	accBiases  = Eigen::Vector3f(biases[0], biases[1], biases[2]) + earthG;
 	gyroBiases = Eigen::Vector3f(biases[3], biases[4], biases[5]);
 
 	// Result printing

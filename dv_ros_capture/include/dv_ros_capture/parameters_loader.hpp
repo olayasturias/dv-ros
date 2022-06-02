@@ -20,11 +20,11 @@ struct Params {
 	std::string cameraFrameName    = "camera";
 	std::string imuFrameName       = "imu";
 	bool transformImuToCameraFrame = true;
-	bool unbiasedImuData            = true;
+	bool unbiasedImuData           = true;
 	std::vector<float> accBiases;
 	std::vector<float> gyroBiases;
-	bool noiseFiltering            = false;
-	int64_t noiseBATime            = 2000;
+	bool noiseFiltering = false;
+	int64_t noiseBATime = 2000;
 };
 
 /**
