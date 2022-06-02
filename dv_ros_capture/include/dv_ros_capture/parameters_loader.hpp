@@ -24,6 +24,7 @@ struct Params {
 	int64_t noiseBATime            = 2000;
 
 	std::vector<std::string> syncDeviceList;
+	bool waitForSync = false;
 };
 
 /**

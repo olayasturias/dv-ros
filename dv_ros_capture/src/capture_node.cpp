@@ -130,7 +130,8 @@ CaptureNode::CaptureNode(std::shared_ptr<ros::NodeHandle> &nodeHandle, const dv_
 		}
 	}
 	else {
-		ROS_WARN("No calibration was found, assuming ideal pinhole (no distortion).");
+		ROS_WARN_STREAM(
+			"[" << mReader.getCameraName() << "] No calibration was found, assuming ideal pinhole (no distortion).");
 		std::optional<cv::Size> resolution;
 		if (mReader.isFrameStreamAvailable()) {
 			resolution = mReader.getFrameResolution();
@@ -272,7 +273,7 @@ bool CaptureNode::synchronizeCamera(
 	if (liveCapture->isConnected() && !liveCapture->isMasterCamera()) {
 		// Update the timestamp offset
 		liveCapture->setTimestampOffset(req.timestampOffset);
-		ROS_INFO("Camera synchronized: timestamp offset updated.");
+		ROS_INFO_STREAM("Camera [" << liveCapture->getCameraName() << "] synchronized: timestamp offset updated.");
 		rsp.cameraName = liveCapture->getCameraName();
 		rsp.success    = true;
 		mSynchronized  = true;
@@ -662,7 +663,7 @@ void CaptureNode::runDiscovery(const std::string &syncServiceName) {
     });
 }
 
-std::vector<std::string> CaptureNode::discoverSyncDevices() const {
+std::map<std::string, std::string> CaptureNode::discoverSyncDevices() const {
 	if (mParams.syncDeviceList.empty()) {
 		return {};
 	}
@@ -672,20 +673,18 @@ std::vector<std::string> CaptureNode::discoverSyncDevices() const {
 
 	// List info about each sync device
 	struct DiscoveryContext {
-		std::unordered_set<std::string> discoveredDevices;
-		std::vector<std::string> serviceNames;
+		std::map<std::string, std::string> serviceNames;
 		std::atomic<bool> complete;
 		std::vector<std::string> deviceList;
 
 		void handleMessage(const boost::shared_ptr<DiscoveryMessage> &message) {
 			const std::string cameraName(message->name.c_str());
-			if (discoveredDevices.contains(cameraName)) {
+			if (serviceNames.contains(cameraName)) {
 				return;
 			}
 
 			if (std::find(deviceList.begin(), deviceList.end(), cameraName) != deviceList.end()) {
-				discoveredDevices.insert(cameraName);
-				serviceNames.emplace_back(message->syncServiceTopic.c_str());
+				serviceNames.insert(std::make_pair(cameraName, message->syncServiceTopic.c_str()));
 				if (serviceNames.size() == deviceList.size()) {
 					complete = true;
 				}
@@ -708,7 +707,7 @@ std::vector<std::string> CaptureNode::discoverSyncDevices() const {
 	return context.serviceNames;
 }
 
-void CaptureNode::sendSyncCalls(const std::vector<std::string> &serviceNames) const {
+void CaptureNode::sendSyncCalls(const std::map<std::string, std::string> &serviceNames) const {
 	if (serviceNames.empty()) {
 		return;
 	}
@@ -722,7 +721,14 @@ void CaptureNode::sendSyncCalls(const std::vector<std::string> &serviceNames) co
 	srv.request.timestampOffset  = liveCapture->getTimestampOffset();
 	srv.request.masterCameraName = liveCapture->getCameraName();
 
-	for (const auto &serviceName : serviceNames) {
+	for (const auto &[cameraName, serviceName] : serviceNames) {
+		if (serviceName.empty()) {
+			ROS_ERROR_STREAM("Camera [" << cameraName
+										<< "] can't be synchronized, synchronization service "
+										   "is unavailable, please check synchronization cable!");
+			continue;
+		}
+
 		ros::ServiceClient client = mNodeHandle->serviceClient<dv_ros_capture::SynchronizeCamera>(serviceName);
 		client.waitForExistence();
 		if (client.call(srv)) {
@@ -736,8 +742,8 @@ void CaptureNode::sendSyncCalls(const std::vector<std::string> &serviceNames) co
 
 void CaptureNode::synchronizationThread() {
 	std::string serviceName;
-    const auto &liveCapture = mReader.getCameraCapturePtr();
-    if (liveCapture->isMasterCamera()) {
+	const auto &liveCapture = mReader.getCameraCapturePtr();
+	if (liveCapture->isMasterCamera()) {
 		// Wait for all cameras to show up
 		const auto syncServiceList = discoverSyncDevices();
 		runDiscovery(serviceName);
@@ -751,9 +757,25 @@ void CaptureNode::synchronizationThread() {
 		serviceName = mSyncServerService->getService();
 		runDiscovery(serviceName);
 
-		ROS_INFO("Waiting for synchronization service call...");
-		while (mSpinThread.load(std::memory_order_relaxed) && !mSynchronized.load(std::memory_order_relaxed)) {
+		// Wait for synchronization only if explicitly requested
+		if (!mParams.waitForSync) {
+			mSynchronized = true;
+		}
+
+		size_t iterations = 0;
+		while (mSpinThread.load(std::memory_order_relaxed)) {
 			std::this_thread::sleep_for(1ms);
+
+			// Do not print warnings if it's synchronized
+			if (mSynchronized.load(std::memory_order_relaxed)) {
+				continue;
+			}
+
+			if (iterations > 2000) {
+				ROS_WARN_STREAM("[" << liveCapture->getCameraName() << "] Waiting for synchronization service call...");
+				iterations = 0;
+			}
+			iterations++;
 		}
 	}
 }

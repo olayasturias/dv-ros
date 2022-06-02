@@ -24,3 +24,7 @@ cameraName: ""
 noiseFiltering: false
 # Noise filter background activity time threshold in microseconds
 noiseBackgroundActivityTime: 2000
+# A list of devices for master camera to synchronize with
+syncDevice: []
+# Wait for synchronization signal before publishing data
+waitForSync: false

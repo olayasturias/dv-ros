@@ -1,6 +1,7 @@
 #include <dv_ros_capture/parameters_loader.hpp>
 
 #include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <iostream>
 #include <string>
@@ -40,6 +41,7 @@ ParametersLoader::ParametersLoader(const ros::NodeHandle &nodeHandle) {
 	}
 
 	nodeHandle.param<std::vector<std::string>>("syncDevices", params_.syncDeviceList, {});
+	nodeHandle.param<bool>("waitForSync", params_.waitForSync, false);
 }
 
 Params ParametersLoader::getParams() {
@@ -58,5 +60,7 @@ void ParametersLoader::printConfiguration() {
 	ROS_INFO_STREAM("cameraCalibrationFilePath: " << params_.cameraCalibrationFilePath);
 	ROS_INFO_STREAM("noiseFiltering: " << (params_.noiseFiltering ? "yes" : "no"));
 	ROS_INFO_STREAM("noiseBackgroundActivityTime: " << params_.noiseBATime);
+	ROS_INFO_STREAM("syncDevices: " << fmt::format("[{}]", fmt::join(params_.syncDeviceList, ", ")));
+	ROS_INFO_STREAM("waitForSync: " << (params_.waitForSync ? "yes" : "no"));
 	ROS_INFO(">>>>>> End of parameters <<<<<<");
 }

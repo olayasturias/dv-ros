@@ -106,7 +106,7 @@ private:
 	TimestampQueue mTriggerQueue;
 	std::atomic<bool> mSpinThread = true;
 	std::thread mClock;
-    std::thread mSyncThread;
+	std::thread mSyncThread;
 	std::unique_ptr<std::thread> mDiscoveryThread = nullptr;
 	boost::recursive_mutex mReaderMutex;
 
@@ -194,11 +194,11 @@ private:
 	bool synchronizeCamera(
 		dv_ros_capture::SynchronizeCamera::Request &req, dv_ros_capture::SynchronizeCamera::Response &rsp);
 
-	[[nodiscard]] std::vector<std::string> discoverSyncDevices() const;
+	[[nodiscard]] std::map<std::string, std::string> discoverSyncDevices() const;
 
-	void sendSyncCalls(const std::vector<std::string> &serviceNames) const;
+	void sendSyncCalls(const std::map<std::string, std::string> &serviceNames) const;
 
-    void synchronizationThread();
+	void synchronizationThread();
 };
 
 } // namespace dv_capture_node
