@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(dv_ros_imu_bias VERSION 1.1.0)
 
-find_package(dv-processing 1.3.0 REQUIRED)
+find_package(dv-processing 1.4.0 REQUIRED)
 find_package(
   catkin REQUIRED COMPONENTS roscpp std_msgs dv_ros_msgs dv_ros_messaging
                              dynamic_reconfigure dv_ros_capture)
