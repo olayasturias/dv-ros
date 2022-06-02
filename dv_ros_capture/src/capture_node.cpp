@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <sensor_msgs/distortion_models.h>
 #include <sensor_msgs/image_encodings.h>
 #include <utility>
 
@@ -219,7 +220,7 @@ void CaptureNode::populateInfoMsg(const dv::camera::CameraGeometry &cameraGeomet
 
 		case dv::camera::DistortionModel::None: {
 			mCameraInfoMsg.distortion_model = sensor_msgs::distortion_models::PLUMB_BOB;
-			mCameraInfoMsg.D                = std::vector<double>(5, 0.0);
+			mCameraInfoMsg.D                = {0.0, 0.0, 0.0, 0.0, 0.0};
 			break;
 		}
 
