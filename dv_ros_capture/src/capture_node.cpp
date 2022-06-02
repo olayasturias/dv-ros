@@ -243,10 +243,10 @@ void CaptureNode::populateInfoMsg(const dv::camera::CameraGeometry &cameraGeomet
 				"Unsupported camera distortion model.", cameraGeometry.getDistortionModel());
 	}
 
-	auto cx          = cameraGeometry.getCentralPoint().x;
-	auto cy          = cameraGeometry.getCentralPoint().y;
-	auto fx          = cameraGeometry.getFocalLength().x;
-	auto fy          = cameraGeometry.getFocalLength().y;
+	auto cx = cameraGeometry.getCentralPoint().x;
+	auto cy = cameraGeometry.getCentralPoint().y;
+	auto fx = cameraGeometry.getFocalLength().x;
+	auto fy = cameraGeometry.getFocalLength().y;
 
 	mCameraInfoMsg.K = {fx, 0, cx, 0, fy, cy, 0, 0, 1};
 	mCameraInfoMsg.R = {1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0};
