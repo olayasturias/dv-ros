@@ -48,7 +48,7 @@ public:
 	 * @param nodeHandle ros::NodeHandle.
 	 * @param params dv_ros_node::Params read from a configuration file specified in the launch file.
 	 */
-	CaptureNode(std::shared_ptr<ros::NodeHandle> &nodeHandle, const dv_ros_node::Params &params);
+	CaptureNode(std::shared_ptr<ros::NodeHandle> nodeHandle, const dv_ros_node::Params &params);
 
 	/**
 	 * Stop the running threads.
