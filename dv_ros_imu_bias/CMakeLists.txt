@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(dv_ros_imu_bias VERSION 1.1.0)
+project(dv_ros_imu_bias VERSION 1.2.0)
 
 find_package(dv-processing 1.4.0 REQUIRED)
 find_package(
