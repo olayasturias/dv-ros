@@ -107,8 +107,11 @@ private:
 	std::unique_ptr<dv::noise::BackgroundActivityNoiseFilter<>> mNoiseFilter = nullptr;
 	void updateNoiseFilter(const bool enable, const int64_t backgroundActivityTime);
 
-	int64_t mImuTimeOffset = 0;
-	Eigen::Vector3<float> mAccBiases, mGyroBiases;
+	dv::camera::CalibrationSet mCalibration;
+
+	int64_t mImuTimeOffset      = 0;
+	Eigen::Vector3f mAccBiases  = Eigen::Vector3f::Zero();
+	Eigen::Vector3f mGyroBiases = Eigen::Vector3f::Zero();
 	std::atomic<int64_t> mCurrentSeek;
 	std::optional<TransformsMessage> mImuToCamTransforms = std::nullopt;
 	dv::kinematics::Transformationf mImuToCamTransform
@@ -161,66 +164,37 @@ private:
 	 * @param imu
 	 * @return ROS Imu message in camera reference frame
 	 */
-	[[nodiscard]] inline dv_ros_msgs::ImuMessage transformImuFrame(dv_ros_msgs::ImuMessage &&imu) {
-		if (mParams.unbiasedImuData) {
-			imu.linear_acceleration.x -= mAccBiases.x();
-			imu.linear_acceleration.y -= mAccBiases.y();
-			imu.linear_acceleration.z -= mAccBiases.z();
-
-			imu.angular_velocity.x -= mGyroBiases.x();
-			imu.angular_velocity.y -= mGyroBiases.y();
-			imu.angular_velocity.z -= mGyroBiases.z();
-		}
-		if (mParams.transformImuToCameraFrame) {
-			const Eigen::Vector3<double> resW
-				= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.angular_velocity);
-			imu.angular_velocity.x = resW.x();
-			imu.angular_velocity.y = resW.y();
-			imu.angular_velocity.z = resW.z();
-
-			const Eigen::Vector3<double> resV
-				= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.linear_acceleration);
-			imu.linear_acceleration.x = resV.x();
-			imu.linear_acceleration.y = resV.y();
-			imu.linear_acceleration.z = resV.z();
-		}
-
-		return imu;
-	}
+	[[nodiscard]] inline dv_ros_msgs::ImuMessage transformImuFrame(dv_ros_msgs::ImuMessage &&imu);
 
 	/**
 	 * Generate the CalibrationSet with the data from the Set Camera Info and the set IMU services.
 	 * @return dv::camera::CalibrationSet
 	 */
-	[[nodiscard]] dv::camera::CalibrationSet generateCalibrationSet() const;
+	void updateCalibrationSet();
 
 	/**
 	 * Stores the calibration data into a new file.
 	 * @return path to the new file.
 	 */
-	[[nodiscard]] fs::path saveCalibration() const;
+	[[nodiscard]] fs::path saveCalibration();
 
 	/**
-	 * Generate new file path with date and time information.
-	 * @return file path
-	 */
-	[[nodiscard]] fs::path newCalibrationPath() const;
-
-	/**
-	 * Update the Imu biases of the existing camera calibration file.
-	 */
-	void updateCalibrationFiles();
-
-	/**
-	 *	Create an active calibration file, when no calibration exists.
+	 * Write current capture node calibration parameters into an active calibration file.
 	 */
 	void generateActiveCalibrationFile();
 
 	/**
 	 * Get the path to the active calibration file.
-	 * @return fs::path
+	 * @return Filesystem path to the currently opened camera active calibration file.
 	 */
 	[[nodiscard]] fs::path getActiveCalibrationPath() const;
+
+	/**
+	 * Get camera calibration directory for the currently opened camera, it uses
+	 * @param createDirectories If true, the method will create the directory if it's not existing in the filesystem.
+	 * @return Path to the calibration
+	 */
+	fs::path getCameraCalibrationDirectory(bool createDirectories = true) const;
 };
 
 } // namespace dv_capture_node
