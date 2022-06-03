@@ -32,3 +32,11 @@ will not replace the "active calibration" file, it only loads calibration from t
 If no calibration is provided or detected, the capture node will issue a warning message and publish "ideal"
 calibration which assumes no distortion, central point as the center of the image pixel space, and focal length
 equal to the width of the image.
+
+# Multiple camera synchronization
+
+Multi-camera setups connected with synchronization cables require synchronization signals to synchronize
+the data streams. This can be achieved by setting up the launch files on which cameras need to be synchronized.
+This guarantees the synchronization to happen at correct time, since all cameras need to be opened prior
+to sending synchronization signal. Please refer `launch/synchronization.launch` file for details on how to
+set up the multi-camera synchronization.

@@ -11,20 +11,21 @@
 #include <filesystem>
 #include <sensor_msgs/distortion_models.h>
 #include <sensor_msgs/image_encodings.h>
-#include <utility>
 
 using namespace dv_capture_node;
 using namespace dv_ros_msgs;
 using namespace std::chrono_literals;
 
-CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params &params) : mParams(params) {
+CaptureNode::CaptureNode(std::shared_ptr<ros::NodeHandle> nodeHandle, const dv_ros_node::Params &params) :
+	mParams(params), mNodeHandle(std::move(nodeHandle)) {
+	mSpinThread = true;
 	if (mParams.aedat4FilePath.empty()) {
 		mReader = dv_ros_node::Reader(mParams.cameraName);
 	}
 	else {
 		mReader = dv_ros_node::Reader(mParams.aedat4FilePath, mParams.cameraName);
 	}
-
+	startupTime = ros::Time::now();
 	if (mParams.frames && !mReader.isFrameStreamAvailable()) {
 		mParams.frames = false;
 		ROS_WARN("Frame stream is not available!");
@@ -43,19 +44,19 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 	}
 
 	if (mParams.frames) {
-		mFramePublisher = nodeHandle.advertise<ImageMessage>("camera/image", 10);
+		mFramePublisher = mNodeHandle->advertise<ImageMessage>("camera/image", 10);
 	}
 
 	if (mParams.imu) {
-		mImuPublisher = nodeHandle.advertise<ImuMessage>("imu", 1000);
+		mImuPublisher = mNodeHandle->advertise<ImuMessage>("imu", 1000);
 	}
 
 	if (mParams.events) {
-		mEventArrayPublisher = nodeHandle.advertise<EventArrayMessage>("events", 1000);
+		mEventArrayPublisher = mNodeHandle->advertise<EventArrayMessage>("events", 1000);
 	}
 
 	if (mParams.triggers) {
-		mTriggerPublisher = nodeHandle.advertise<TriggerMessage>("triggers", 10);
+		mTriggerPublisher = mNodeHandle->advertise<TriggerMessage>("triggers", 10);
 	}
 
 	if (!mParams.frames && !mParams.events) {
@@ -63,9 +64,9 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 		return;
 	}
 
-	mCameraInfoPublisher = nodeHandle.advertise<CameraInfoMessage>("camera_info", 10);
-	mCameraService       = nodeHandle.advertiseService("set_camera_info", &CaptureNode::setCameraInfo, this);
-	mImuInfoService      = nodeHandle.advertiseService("set_imu_info", &CaptureNode::setImuInfo, this);
+	mCameraInfoPublisher = mNodeHandle->advertise<CameraInfoMessage>("camera_info", 10);
+	mCameraService       = mNodeHandle->advertiseService("set_camera_info", &CaptureNode::setCameraInfo, this);
+	mImuInfoService      = mNodeHandle->advertiseService("set_imu_info", &CaptureNode::setImuInfo, this);
 
 	fs::path activeCalibrationPath = getActiveCalibrationPath();
 	fs::path calibrationPath;
@@ -87,7 +88,7 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 		const std::string cameraName = mReader.getCameraName();
 		auto cameraCalibration       = calibSet.getCameraCalibrationByName(cameraName);
 		if (const auto &imuCalib = calibSet.getImuCalibrationByName(cameraName); imuCalib.has_value()) {
-			mTransformPublisher = nodeHandle.advertise<TransformsMessage>("/tf", 100);
+			mTransformPublisher = mNodeHandle->advertise<TransformsMessage>("/tf", 100);
 			mImuTimeOffset      = imuCalib->timeOffsetMicros;
 
 			TransformMessage msg;
@@ -127,7 +128,8 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 		}
 	}
 	else {
-		ROS_WARN("No calibration was found, assuming ideal pinhole (no distortion).");
+		ROS_WARN_STREAM(
+			"[" << mReader.getCameraName() << "] No calibration was found, assuming ideal pinhole (no distortion).");
 		std::optional<cv::Size> resolution;
 		if (mReader.isFrameStreamAvailable()) {
 			resolution = mReader.getFrameResolution();
@@ -149,8 +151,8 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 	if (cameraPtr != nullptr) {
 		if (cameraPtr->isFrameStreamAvailable()) {
 			// DAVIS camera
-			davisColorServer
-				= std::make_unique<dynamic_reconfigure::Server<dv_ros_capture::DAVISConfig>>(mReaderMutex, nodeHandle);
+			davisColorServer = std::make_unique<dynamic_reconfigure::Server<dv_ros_capture::DAVISConfig>>(
+				mReaderMutex, *mNodeHandle);
 			dv_ros_capture::DAVISConfig initialSettings    = dv_ros_capture::DAVISConfig::__getDefault__();
 			initialSettings.noise_filtering                = mParams.noiseFiltering;
 			initialSettings.noise_background_activity_time = static_cast<int>(mParams.noiseBATime);
@@ -171,7 +173,7 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 		else {
 			// DVXplorer type camera
 			dvxplorerServer = std::make_unique<dynamic_reconfigure::Server<dv_ros_capture::DVXplorerConfig>>(
-				mReaderMutex, nodeHandle);
+				mReaderMutex, *mNodeHandle);
 			dv_ros_capture::DVXplorerConfig initialSettings = dv_ros_capture::DVXplorerConfig::__getDefault__();
 			initialSettings.noise_filtering                 = mParams.noiseFiltering;
 			initialSettings.noise_background_activity_time  = static_cast<int>(mParams.noiseBATime);
@@ -186,7 +188,7 @@ CaptureNode::CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params 
 	}
 	else {
 		playbackServer
-			= std::make_unique<dynamic_reconfigure::Server<dv_ros_capture::PlaybackConfig>>(mReaderMutex, nodeHandle);
+			= std::make_unique<dynamic_reconfigure::Server<dv_ros_capture::PlaybackConfig>>(mReaderMutex, *mNodeHandle);
 		dv_ros_capture::PlaybackConfig initialSettings = dv_ros_capture::PlaybackConfig::__getDefault__();
 		initialSettings.noise_filtering                = mParams.noiseFiltering;
 		initialSettings.noise_background_activity_time = static_cast<int>(mParams.noiseBATime);
@@ -251,6 +253,32 @@ bool CaptureNode::setCameraInfo(sensor_msgs::SetCameraInfo::Request &req, sensor
 		rsp.status_message = fmt::format("Error storing camera calibration.");
 	}
 
+	return true;
+}
+
+bool CaptureNode::synchronizeCamera(
+	dv_ros_capture::SynchronizeCamera::Request &req, dv_ros_capture::SynchronizeCamera::Response &rsp) {
+	ROS_INFO_STREAM("Received synchronization request from [" << req.masterCameraName << "]");
+
+	// Assume failure case
+	rsp.success = false;
+
+	auto &liveCapture = mReader.getCameraCapturePtr();
+	if (!liveCapture) {
+		ROS_WARN("Received synchronization request on a non-live camera!");
+		return true;
+	}
+	if (liveCapture->isConnected() && !liveCapture->isMasterCamera()) {
+		// Update the timestamp offset
+		liveCapture->setTimestampOffset(req.timestampOffset);
+		ROS_INFO_STREAM("Camera [" << liveCapture->getCameraName() << "] synchronized: timestamp offset updated.");
+		rsp.cameraName = liveCapture->getCameraName();
+		rsp.success    = true;
+		mSynchronized  = true;
+	}
+	else {
+		ROS_WARN("Received synchronization request on a master camera, please check synchronization cable!");
+	}
 	return true;
 }
 
@@ -338,8 +366,18 @@ fs::path CaptureNode::saveCalibration() const {
 
 void CaptureNode::startCapture() {
 	ROS_INFO("Spinning capture node.");
-	mSpinThread = true;
-	auto times  = mReader.getTimeRange();
+	auto times = mReader.getTimeRange();
+
+	const auto &liveCapture = mReader.getCameraCapturePtr();
+	// If the pointer is valid - the reader is handling a live camera
+	if (liveCapture) {
+		mSynchronized = false;
+		mSyncThread   = std::thread(&CaptureNode::synchronizationThread, this);
+	}
+	else {
+		mSynchronized = true;
+	}
+
 	if (times.has_value()) {
 		mClock = std::thread(&CaptureNode::clock, this, times->first, times->second, mParams.timeIncrement);
 	}
@@ -410,19 +448,21 @@ void CaptureNode::clock(int64_t start, int64_t end, int64_t timeIncrement) {
 	}
 
 	while (mSpinThread) {
-		if (mParams.frames) {
-			mFrameQueue.push(start);
+		if (mSynchronized.load(std::memory_order_relaxed)) {
+			if (mParams.frames) {
+				mFrameQueue.push(start);
+			}
+			if (mParams.imu) {
+				mImuQueue.push(start);
+			}
+			if (mParams.events) {
+				mEventsQueue.push(start);
+			}
+			if (mParams.triggers) {
+				mTriggerQueue.push(start);
+			}
+			start += timeIncrement;
 		}
-		if (mParams.imu) {
-			mImuQueue.push(start);
-		}
-		if (mParams.events) {
-			mEventsQueue.push(start);
-		}
-		if (mParams.triggers) {
-			mTriggerQueue.push(start);
-		}
-		start += timeIncrement;
 
 		sleepRate.sleep();
 		// EOF or reader is disconnected
@@ -449,8 +489,14 @@ void CaptureNode::stop() {
 	if (mParams.triggers) {
 		mTriggerThread.join();
 	}
+	if (mSyncThread.joinable()) {
+		mSyncThread.join();
+	}
 	if (mCameraInfoThread != nullptr) {
 		mCameraInfoThread->join();
+	}
+	if (mDiscoveryThread != nullptr) {
+		mDiscoveryThread->join();
 	}
 }
 
@@ -582,4 +628,169 @@ CaptureNode::~CaptureNode() {
 
 bool CaptureNode::isRunning() const {
 	return mSpinThread.load(std::memory_order_relaxed);
+}
+
+void CaptureNode::runDiscovery(const std::string &syncServiceName) {
+	const auto &liveCapture = mReader.getCameraCapturePtr();
+
+	if (liveCapture == nullptr) {
+		return;
+	}
+
+	mDiscoveryPublisher = mNodeHandle->advertise<DiscoveryMessage>("/dvs/discovery", 10);
+	mDiscoveryThread    = std::make_unique<std::thread>([this, &liveCapture, &syncServiceName] {
+        DiscoveryMessage message;
+        message.isMaster         = liveCapture->isMasterCamera();
+        message.name             = liveCapture->getCameraName();
+        message.startupTime      = startupTime;
+        message.publishingEvents = mParams.events;
+        message.publishingFrames = mParams.frames;
+        message.publishingImu    = mParams.imu;
+        message.publishingEvents = mParams.events;
+        message.syncServiceTopic = syncServiceName;
+        // 5 Hz is enough
+        ros::Rate rate(5.0);
+        while (mSpinThread) {
+            if (mDiscoveryPublisher.getNumSubscribers() > 0) {
+                message.header.seq++;
+                message.header.stamp = ros::Time::now();
+                mDiscoveryPublisher.publish(message);
+            }
+            rate.sleep();
+        }
+    });
+}
+
+std::map<std::string, std::string> CaptureNode::discoverSyncDevices() const {
+	if (mParams.syncDeviceList.empty()) {
+		return {};
+	}
+
+	ROS_INFO_STREAM(
+		"Waiting for devices [" << fmt::format("{}", fmt::join(mParams.syncDeviceList, ", ")) << "] to be online");
+
+	// List info about each sync device
+	struct DiscoveryContext {
+		std::map<std::string, std::string> serviceNames;
+		std::atomic<bool> complete;
+		std::vector<std::string> deviceList;
+
+		void handleMessage(const boost::shared_ptr<DiscoveryMessage> &message) {
+			const std::string cameraName(message->name.c_str());
+			if (serviceNames.contains(cameraName)) {
+				return;
+			}
+
+			if (std::find(deviceList.begin(), deviceList.end(), cameraName) != deviceList.end()) {
+				serviceNames.insert(std::make_pair(cameraName, message->syncServiceTopic.c_str()));
+				if (serviceNames.size() == deviceList.size()) {
+					complete = true;
+				}
+			}
+		}
+	};
+
+	DiscoveryContext context;
+	context.deviceList = mParams.syncDeviceList;
+	context.complete   = false;
+
+	auto subscriber = mNodeHandle->subscribe("/dvs/discovery", 10, &DiscoveryContext::handleMessage, &context);
+
+	while (mSpinThread.load(std::memory_order_relaxed) && !context.complete.load(std::memory_order_relaxed)) {
+		std::this_thread::sleep_for(1ms);
+	}
+
+	ROS_INFO("All sync devices are online.");
+
+	return context.serviceNames;
+}
+
+void CaptureNode::sendSyncCalls(const std::map<std::string, std::string> &serviceNames) const {
+	if (serviceNames.empty()) {
+		return;
+	}
+
+	const auto &liveCapture = mReader.getCameraCapturePtr();
+	if (!liveCapture) {
+		return;
+	}
+
+	dv_ros_capture::SynchronizeCamera srv;
+	srv.request.timestampOffset  = liveCapture->getTimestampOffset();
+	srv.request.masterCameraName = liveCapture->getCameraName();
+
+	for (const auto &[cameraName, serviceName] : serviceNames) {
+		if (serviceName.empty()) {
+			ROS_ERROR_STREAM("Camera [" << cameraName
+										<< "] can't be synchronized, synchronization service "
+										   "is unavailable, please check synchronization cable!");
+			continue;
+		}
+
+		ros::ServiceClient client = mNodeHandle->serviceClient<dv_ros_capture::SynchronizeCamera>(serviceName);
+		client.waitForExistence();
+		if (client.call(srv)) {
+			ROS_INFO_STREAM("Successfully synchronized device [" << srv.response.cameraName << "]");
+		}
+		else {
+			ROS_ERROR_STREAM("Failed to synchronize device available on service [" << serviceName << "]");
+		}
+	}
+}
+
+void CaptureNode::synchronizationThread() {
+	std::string serviceName;
+	const auto &liveCapture = mReader.getCameraCapturePtr();
+	if (liveCapture->isMasterCamera()) {
+		// Wait for all cameras to show up
+		const auto syncServiceList = discoverSyncDevices();
+		runDiscovery(serviceName);
+		sendSyncCalls(syncServiceList);
+		mSynchronized = true;
+	}
+	else {
+		mSyncServerService = std::make_unique<ros::ServiceServer>(mNodeHandle->advertiseService(
+			fmt::format("{}/sync", liveCapture->getCameraName()), &CaptureNode::synchronizeCamera, this));
+
+		serviceName = mSyncServerService->getService();
+		runDiscovery(serviceName);
+
+		// Wait for synchronization only if explicitly requested
+		if (!mParams.waitForSync) {
+			mSynchronized = true;
+		}
+
+		size_t iterations = 0;
+		while (mSpinThread.load(std::memory_order_relaxed)) {
+			std::this_thread::sleep_for(1ms);
+
+			// Do not print warnings if it's synchronized
+			if (mSynchronized.load(std::memory_order_relaxed)) {
+				continue;
+			}
+
+			if (iterations > 2000) {
+				ROS_WARN_STREAM("[" << liveCapture->getCameraName() << "] Waiting for synchronization service call...");
+				iterations = 0;
+			}
+			iterations++;
+		}
+	}
+}
+
+dv_ros_msgs::ImuMessage CaptureNode::transformImuFrame(ImuMessage &&imu) {
+	if (mParams.transformImuToCameraFrame && mImuToCamTransforms.has_value()) {
+		const Eigen::Vector3<double> resW
+			= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.angular_velocity);
+		imu.angular_velocity.x = resW.x();
+		imu.angular_velocity.y = resW.y();
+		imu.angular_velocity.z = resW.z();
+
+		const Eigen::Vector3<double> resV
+			= mImuToCamTransform.rotatePoint<Eigen::Vector3<double>>(imu.linear_acceleration);
+		imu.linear_acceleration.x = resV.x();
+		imu.linear_acceleration.y = resV.y();
+		imu.linear_acceleration.z = resV.z();
+	}
+	return imu;
 }
