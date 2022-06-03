@@ -60,7 +60,7 @@ void ParametersLoader::printConfiguration() {
 		ROS_INFO_STREAM("aedat4FilePath: " << params_.aedat4FilePath);
 	}
 	if (!params_.cameraName.empty()) {
-		ROS_INFO_STREAM("cameraName: " << params_.aedat4FilePath);
+		ROS_INFO_STREAM("cameraName: " << params_.cameraName);
 	}
 	ROS_INFO_STREAM("cameraCalibrationFilePath: " << params_.cameraCalibrationFilePath);
 	ROS_INFO_STREAM("noiseFiltering: " << (params_.noiseFiltering ? "yes" : "no"));
