@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(dv_ros_capture VERSION 1.1.0)
 
-find_package(dv-processing 1.4.0 REQUIRED)
+find_package(dv-processing 1.5 REQUIRED)
 find_package(
   catkin REQUIRED
   COMPONENTS roscpp
@@ -19,14 +19,14 @@ find_package(
              tf2_msgs
              message_generation)
 
-add_message_files(FILES ImuInfo.msg)
+add_message_files(FILES ImuInfo.msg CameraDiscovery.msg)
 
 generate_dynamic_reconfigure_options(config/DVXplorer.cfg config/DAVIS.cfg
                                      config/Playback.cfg)
 
 include_directories(include ${catkin_INCLUDE_DIRS})
 
-add_service_files(FILES SetImuInfo.srv SetImuBiases.srv)
+add_service_files(FILES SetImuInfo.srv SetImuBiases.srv SynchronizeCamera.srv)
 
 generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
 

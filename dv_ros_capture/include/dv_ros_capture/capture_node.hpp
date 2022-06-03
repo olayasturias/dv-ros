@@ -8,13 +8,16 @@
 
 #include <dv_ros_messaging/messaging.hpp>
 
+#include <dv_ros_capture/CameraDiscovery.h>
 #include <dv_ros_capture/DAVISConfig.h>
 #include <dv_ros_capture/DVXplorerConfig.h>
 #include <dv_ros_capture/PlaybackConfig.h>
-#include <dv_ros_capture/SetImuBiasesService.h>
-#include <dv_ros_capture/SetImuInfoService.h>
-#include <dv_ros_capture/parameters_loader.hpp>
-#include <dv_ros_capture/reader.hpp>
+
+#include "SetImuBiasesService.h"
+#include "SetImuInfoService.h"
+#include "SynchronizeCameraService.h"
+#include "parameters_loader.hpp"
+#include "reader.hpp"
 
 #include <boost/lockfree/spsc_queue.hpp>
 
@@ -33,6 +36,7 @@ using TimestampQueue = boost::lockfree::spsc_queue<int64_t, boost::lockfree::cap
 
 using TransformMessage  = DV_ROS_MSGS(geometry_msgs::TransformStamped);
 using TransformsMessage = DV_ROS_MSGS(tf2_msgs::TFMessage);
+using DiscoveryMessage  = DV_ROS_MSGS(dv_ros_capture::CameraDiscovery);
 
 namespace fs = std::filesystem;
 
@@ -46,7 +50,7 @@ public:
 	 * @param nodeHandle ros::NodeHandle.
 	 * @param params dv_ros_node::Params read from a configuration file specified in the launch file.
 	 */
-	CaptureNode(ros::NodeHandle &nodeHandle, const dv_ros_node::Params &params);
+	CaptureNode(std::shared_ptr<ros::NodeHandle> nodeHandle, const dv_ros_node::Params &params);
 
 	/**
 	 * Stop the running threads.
@@ -77,14 +81,17 @@ private:
 	ros::Publisher mEventArrayPublisher;
 	ros::Publisher mTriggerPublisher;
 	ros::Publisher mTransformPublisher;
+	ros::Publisher mDiscoveryPublisher;
 	ros::ServiceServer mCameraService;
 	ros::ServiceServer mImuInfoService;
 	ros::ServiceServer mImuBiasesService;
+	std::unique_ptr<ros::ServiceServer> mSyncServerService = nullptr;
+	std::shared_ptr<ros::NodeHandle> mNodeHandle           = nullptr;
 
 	// Declare the Reader to read from the device or from a recording.
 	dv_ros_node::Reader mReader;
 
-	// Paramters read from the configuration file. Set to true the type of data that needs to be streamed.
+	// Parameters read from the configuration file. Set to true the type of data that needs to be streamed.
 	dv_ros_node::Params mParams;
 
 	// Camera info message buffer
@@ -102,7 +109,11 @@ private:
 	TimestampQueue mTriggerQueue;
 	std::atomic<bool> mSpinThread = true;
 	std::thread mClock;
+	std::thread mSyncThread;
+	std::unique_ptr<std::thread> mDiscoveryThread = nullptr;
 	boost::recursive_mutex mReaderMutex;
+
+	std::atomic<bool> mSynchronized;
 
 	std::unique_ptr<dv::noise::BackgroundActivityNoiseFilter<>> mNoiseFilter = nullptr;
 	void updateNoiseFilter(const bool enable, const int64_t backgroundActivityTime);
@@ -112,6 +123,7 @@ private:
 	int64_t mImuTimeOffset      = 0;
 	Eigen::Vector3f mAccBiases  = Eigen::Vector3f::Zero();
 	Eigen::Vector3f mGyroBiases = Eigen::Vector3f::Zero();
+	ros::Time startupTime;
 	std::atomic<int64_t> mCurrentSeek;
 	std::optional<TransformsMessage> mImuToCamTransforms = std::nullopt;
 	dv::kinematics::Transformationf mImuToCamTransform
@@ -195,6 +207,43 @@ private:
 	 * @return Path to the calibration
 	 */
 	fs::path getCameraCalibrationDirectory(bool createDirectories = true) const;
+
+	/**
+	 * Creates and runs a thread that publishes discovery messages about the type of the camera.
+	 * @param syncServiceName   Provide a synchronization service name in the discovery message if the camera
+	 *                          is connected with a synchronization cable.
+	 */
+	void runDiscovery(const std::string &syncServiceName);
+
+	/**
+	 * Handler for the camera synchronization service.
+	 * @param req       Synchronization request.
+	 * @param rsp       Synchronization response.
+	 * @return          Whether synchronization succeeded.
+	 */
+	[[nodiscar]] bool synchronizeCamera(
+		dv_ros_capture::SynchronizeCamera::Request &req, dv_ros_capture::SynchronizeCamera::Response &rsp);
+
+	/**
+	 * A blocking call that waits until all devices in `mParams.syncDeviceList` is online and discovered over
+	 * the /dvs/discovery topic.
+	 * @return      A map of devices, where key is the camera name and value is the name of synchronization service.
+	 */
+	[[nodiscard]] std::map<std::string, std::string> discoverSyncDevices() const;
+
+	/**
+	 * Send synchronization calls to the list of devices. This function distributes the timestamp offset to the
+	 * given devices over synchronization service calls. The list of devices should be retrieved by
+	 * `discoverSyncDevices` call.
+	 * @param serviceNames  List of devices to synchronize.
+	 * @sa CaptureNode::discoverSyncDevices
+	 */
+	void sendSyncCalls(const std::map<std::string, std::string> &serviceNames) const;
+
+	/**
+	 * Run and maintain a synchronization service online for the master node to synchronize.
+	 */
+	void synchronizationThread();
 };
 
 } // namespace dv_capture_node

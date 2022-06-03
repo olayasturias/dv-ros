@@ -12,9 +12,9 @@ int main(int argc, char **argv) {
 	ros::init(argc, argv, "capture_node");
 
 	// Start node
-	ros::NodeHandle nh("~");
+	auto nh = std::make_shared<ros::NodeHandle>("~");
 
-	auto loadParams = dv_ros_node::ParametersLoader(nh);
+	auto loadParams = dv_ros_node::ParametersLoader(*nh);
 	loadParams.printConfiguration();
 
 	auto node = CaptureNode(nh, loadParams.getParams());
