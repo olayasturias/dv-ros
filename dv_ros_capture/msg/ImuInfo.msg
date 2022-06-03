@@ -7,12 +7,6 @@ geometry_msgs/Transform T_SC
 # Offset between the camera and IMU timestamps in microseconds (t_correct = t_imu - offset)
 int64 timeOffsetMicros
 
-# Average offset (bias) of the angular velocity [rad/s]
-geometry_msgs/Point omegaOffsetAvg
-
-# Average offset (bias) of the acceleration [m/s^2]
-geometry_msgs/Point accOffsetAvg
-
 # Variance of the offset of the angular velocity [rad/s]
 float32 omegaOffsetVar
 

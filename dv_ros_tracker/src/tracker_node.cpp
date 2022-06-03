@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <memory>
+#include <sensor_msgs/distortion_models.h>
 
 using namespace dv_tracker_node;
 using namespace std::chrono_literals;
@@ -145,10 +146,10 @@ void TrackerNode::cameraInfoCallback(const dv_ros_msgs::CameraInfoMessage::Const
 		mCameraCalibration.distortion.push_back(static_cast<float>(d));
 	}
 
-	if (msgPtr->distortion_model == "fisheye") {
+	if (static_cast<std::string>(msgPtr->distortion_model) == sensor_msgs::distortion_models::EQUIDISTANT) {
 		mCameraCalibration.distortionModel = dv::camera::DistortionModel::Equidistant;
 	}
-	else if (msgPtr->distortion_model == "plumb_bob") {
+	else if (static_cast<std::string>(msgPtr->distortion_model) == sensor_msgs::distortion_models::PLUMB_BOB) {
 		mCameraCalibration.distortionModel = dv::camera::DistortionModel::RadTan;
 	}
 	else {

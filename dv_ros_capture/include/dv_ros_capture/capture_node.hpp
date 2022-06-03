@@ -1,5 +1,6 @@
 #pragma once
 
+#include <dv-processing/camera/calibration_set.hpp>
 #include <dv-processing/camera/calibrations/camera_calibration.hpp>
 #include <dv-processing/core/core.hpp>
 #include <dv-processing/io/mono_camera_recording.hpp>
@@ -12,6 +13,7 @@
 #include <dv_ros_capture/DVXplorerConfig.h>
 #include <dv_ros_capture/PlaybackConfig.h>
 
+#include "SetImuBiasesService.h"
 #include "SetImuInfoService.h"
 #include "SynchronizeCameraService.h"
 #include "parameters_loader.hpp"
@@ -82,6 +84,7 @@ private:
 	ros::Publisher mDiscoveryPublisher;
 	ros::ServiceServer mCameraService;
 	ros::ServiceServer mImuInfoService;
+	ros::ServiceServer mImuBiasesService;
 	std::unique_ptr<ros::ServiceServer> mSyncServerService = nullptr;
 	std::shared_ptr<ros::NodeHandle> mNodeHandle           = nullptr;
 
@@ -115,8 +118,12 @@ private:
 	std::unique_ptr<dv::noise::BackgroundActivityNoiseFilter<>> mNoiseFilter = nullptr;
 	void updateNoiseFilter(const bool enable, const int64_t backgroundActivityTime);
 
+	dv::camera::CalibrationSet mCalibration;
+
+	int64_t mImuTimeOffset      = 0;
+	Eigen::Vector3f mAccBiases  = Eigen::Vector3f::Zero();
+	Eigen::Vector3f mGyroBiases = Eigen::Vector3f::Zero();
 	ros::Time startupTime;
-	int64_t mImuTimeOffset = 0;
 	std::atomic<int64_t> mCurrentSeek;
 	std::optional<TransformsMessage> mImuToCamTransforms = std::nullopt;
 	dv::kinematics::Transformationf mImuToCamTransform
@@ -137,6 +144,7 @@ private:
 	 */
 	void imuPublisher();
 	bool setImuInfo(dv_ros_capture::SetImuInfo::Request &req, dv_ros_capture::SetImuInfo::Response &rsp);
+	bool setImuBiases(dv_ros_capture::SetImuBiases::Request &req, dv_ros_capture::SetImuBiases::Response &rsp);
 
 	/**
 	 * Publish the events if mEventsBool is True
@@ -170,19 +178,71 @@ private:
 	 */
 	[[nodiscard]] inline dv_ros_msgs::ImuMessage transformImuFrame(dv_ros_msgs::ImuMessage &&imu);
 
-	[[nodiscard]] fs::path saveCalibration() const;
+	/**
+	 * Generate the CalibrationSet with the data from the Set Camera Info and the set IMU services.
+	 * @return dv::camera::CalibrationSet
+	 */
+	void updateCalibrationSet();
 
+	/**
+	 * Stores the calibration data into a new file.
+	 * @return path to the new file.
+	 */
+	[[nodiscard]] fs::path saveCalibration();
+
+	/**
+	 * Write current capture node calibration parameters into an active calibration file.
+	 */
+	void generateActiveCalibrationFile();
+
+	/**
+	 * Get the path to the active calibration file.
+	 * @return Filesystem path to the currently opened camera active calibration file.
+	 */
 	[[nodiscard]] fs::path getActiveCalibrationPath() const;
 
+	/**
+	 * Get camera calibration directory for the currently opened camera, it uses
+	 * @param createDirectories If true, the method will create the directory if it's not existing in the filesystem.
+	 * @return Path to the calibration
+	 */
+	fs::path getCameraCalibrationDirectory(bool createDirectories = true) const;
+
+	/**
+	 * Creates and runs a thread that publishes discovery messages about the type of the camera.
+	 * @param syncServiceName   Provide a synchronization service name in the discovery message if the camera
+	 *                          is connected with a synchronization cable.
+	 */
 	void runDiscovery(const std::string &syncServiceName);
 
-	bool synchronizeCamera(
+	/**
+	 * Handler for the camera synchronization service.
+	 * @param req       Synchronization request.
+	 * @param rsp       Synchronization response.
+	 * @return          Whether synchronization succeeded.
+	 */
+	[[nodiscar]] bool synchronizeCamera(
 		dv_ros_capture::SynchronizeCamera::Request &req, dv_ros_capture::SynchronizeCamera::Response &rsp);
 
+	/**
+	 * A blocking call that waits until all devices in `mParams.syncDeviceList` is online and discovered over
+	 * the /dvs/discovery topic.
+	 * @return      A map of devices, where key is the camera name and value is the name of synchronization service.
+	 */
 	[[nodiscard]] std::map<std::string, std::string> discoverSyncDevices() const;
 
+	/**
+	 * Send synchronization calls to the list of devices. This function distributes the timestamp offset to the
+	 * given devices over synchronization service calls. The list of devices should be retrieved by
+	 * `discoverSyncDevices` call.
+	 * @param serviceNames  List of devices to synchronize.
+	 * @sa CaptureNode::discoverSyncDevices
+	 */
 	void sendSyncCalls(const std::map<std::string, std::string> &serviceNames) const;
 
+	/**
+	 * Run and maintain a synchronization service online for the master node to synchronize.
+	 */
 	void synchronizationThread();
 };
 

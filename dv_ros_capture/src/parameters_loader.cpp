@@ -21,6 +21,7 @@ ParametersLoader::ParametersLoader(const ros::NodeHandle &nodeHandle) {
 	nodeHandle.param<std::string>("cameraFrameName", params_.cameraFrameName, "camera");
 	nodeHandle.param<std::string>("imuFrameName", params_.imuFrameName, "imu");
 	nodeHandle.param<bool>("transformImuToCameraFrame", params_.transformImuToCameraFrame, true);
+	nodeHandle.param<bool>("unbiasedImuData", params_.unbiasedImuData, true);
 
 	nodeHandle.param<bool>("noiseFiltering", params_.noiseFiltering, false);
 	int value;
