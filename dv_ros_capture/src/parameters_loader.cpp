@@ -34,7 +34,7 @@ ParametersLoader::ParametersLoader(const ros::NodeHandle &nodeHandle) {
 
 	if (nodeHandle.getParam("aedat4FilePath", tmp)) {
 		params_.aedat4FilePath = tmp;
-		if (!std::filesystem::exists(params_.aedat4FilePath)) {
+		if (!params_.aedat4FilePath.empty() && !std::filesystem::exists(params_.aedat4FilePath)) {
 			throw std::invalid_argument(
 				fmt::format("File {0} not found. Please provide a correct path in the configuration file.",
 					params_.aedat4FilePath.string()));
