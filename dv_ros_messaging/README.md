@@ -7,7 +7,7 @@ C++20 anymore. This can be worked around by using different allocator instead of
 
 ## Usage
 
-This project needs to linkedTo build a ROS node using dv-processing, add `dv_ros_messaging` and `dv_ros_msgs` as
+To build a ROS node using dv-processing, add `dv_ros_messaging` and `dv_ros_msgs` as
 a dependency in the find catkin call (also add find_package for dv-processing):
 ```cmake
 find_package(catkin REQUIRED COMPONENTS
