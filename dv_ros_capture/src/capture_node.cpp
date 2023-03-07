@@ -744,7 +744,7 @@ void CaptureNode::runDiscovery(const std::string &syncServiceName) {
         message.publishingEvents = mParams.events;
         message.publishingFrames = mParams.frames;
         message.publishingImu    = mParams.imu;
-        message.publishingEvents = mParams.events;
+        message.publishingTriggers = mParams.triggers;
         message.syncServiceTopic = syncServiceName;
         // 5 Hz is enough
         ros::Rate rate(5.0);
