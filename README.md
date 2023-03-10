@@ -2,7 +2,6 @@
 
 ROS drivers and sample nodes for iniVation cameras and DV software infrastructure.
 
-
 ## Installation on Ubuntu OS
 
 The code depends on DV software libraries, these libraries need to be installed for the ROS nodes to compile.
@@ -21,6 +20,12 @@ sudo apt install dv-processing dv-runtime-dev gcc-10 g++-10
 sudo add-apt-repository ppa:inivation-ppa/inivation
 sudo apt update
 sudo apt install dv-processing dv-runtime-dev gcc-10 g++-10
+```
+
+Some extra ROS dependencies might also be needed:
+```
+# Example for ROS Noetic on Ubuntu 20.04
+sudo apt install python3-catkin python3-catkin-tools ros-noetic-catkin ros-noetic-camera-info-manager
 ```
 
 The project is build using catkin tools, run the following commands from your catkin workspace:
