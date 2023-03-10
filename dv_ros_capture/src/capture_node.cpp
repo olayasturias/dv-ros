@@ -175,6 +175,12 @@ CaptureNode::CaptureNode(std::shared_ptr<ros::NodeHandle> nodeHandle, const dv_r
 				}
 				updateNoiseFilter(config.noise_filtering, static_cast<int64_t>(config.noise_background_activity_time));
 			});
+
+			// External trigger detection support for DAVIS346 - MODIFY HERE FOR DIFFERENT DETECTION SETTINGS!
+			cameraPtr->deviceConfigSet(DAVIS_CONFIG_EXTINPUT, DAVIS_CONFIG_EXTINPUT_DETECT_RISING_EDGES, true);
+			cameraPtr->deviceConfigSet(DAVIS_CONFIG_EXTINPUT, DAVIS_CONFIG_EXTINPUT_DETECT_FALLING_EDGES, false);
+			cameraPtr->deviceConfigSet(DAVIS_CONFIG_EXTINPUT, DAVIS_CONFIG_EXTINPUT_DETECT_PULSES, false);
+			cameraPtr->deviceConfigSet(DAVIS_CONFIG_EXTINPUT, DAVIS_CONFIG_EXTINPUT_RUN_DETECTOR, mParams.triggers);
 		}
 		else {
 			// DVXplorer type camera
@@ -190,6 +196,12 @@ CaptureNode::CaptureNode(std::shared_ptr<ros::NodeHandle> nodeHandle, const dv_r
 					static_cast<dv::io::CameraCapture::BiasSensitivity>(config.bias_sensitivity));
 				updateNoiseFilter(config.noise_filtering, static_cast<int64_t>(config.noise_background_activity_time));
 			});
+
+			// External trigger detection support for DVXplorer - MODIFY HERE FOR DIFFERENT DETECTION SETTINGS!
+			cameraPtr->deviceConfigSet(DVX_EXTINPUT, DVX_EXTINPUT_DETECT_RISING_EDGES, true);
+			cameraPtr->deviceConfigSet(DVX_EXTINPUT, DVX_EXTINPUT_DETECT_FALLING_EDGES, false);
+			cameraPtr->deviceConfigSet(DVX_EXTINPUT, DVX_EXTINPUT_DETECT_PULSES, false);
+			cameraPtr->deviceConfigSet(DVX_EXTINPUT, DVX_EXTINPUT_RUN_DETECTOR, mParams.triggers);
 		}
 	}
 	else {
@@ -649,6 +661,11 @@ void CaptureNode::imuPublisher() {
 				std::lock_guard<boost::recursive_mutex> lockGuard(mReaderMutex);
 				imuData = mReader.getNextImuBatch();
 			}
+
+			// If value present but empty, we don't want to keep it for later spins.
+			if (imuData.has_value() && imuData->empty()) {
+				imuData = std::nullopt;
+			}
 		});
 		std::this_thread::sleep_for(100us);
 	}
@@ -677,6 +694,11 @@ void CaptureNode::triggerPublisher() {
 				std::lock_guard<boost::recursive_mutex> lockGuard(mReaderMutex);
 				triggerData = mReader.getNextTriggerBatch();
 			}
+
+			// If value present but empty, we don't want to keep it for later spins.
+			if (triggerData.has_value() && triggerData->empty()) {
+				triggerData = std::nullopt;
+			}
 		});
 		std::this_thread::sleep_for(100us);
 	}
@@ -695,7 +717,7 @@ void CaptureNode::eventsPublisher() {
 				std::lock_guard<boost::recursive_mutex> lockGuard(mReaderMutex);
 				events = mReader.getNextEventBatch();
 			}
-			while (events.has_value() && timestamp >= events->getHighestTime()) {
+			while (events.has_value() && !events->isEmpty() && timestamp >= events->getHighestTime()) {
 				dv::EventStore store;
 				if (mNoiseFilter != nullptr) {
 					mNoiseFilter->accept(*events);
@@ -714,6 +736,11 @@ void CaptureNode::eventsPublisher() {
 
 				std::lock_guard<boost::recursive_mutex> lockGuard(mReaderMutex);
 				events = mReader.getNextEventBatch();
+			}
+
+			// If value present but empty, we don't want to keep it for later spins.
+			if (events.has_value() && events->isEmpty()) {
+				events = std::nullopt;
 			}
 		});
 		std::this_thread::sleep_for(100us);
