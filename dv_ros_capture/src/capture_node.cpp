@@ -203,6 +203,9 @@ CaptureNode::CaptureNode(std::shared_ptr<ros::NodeHandle> nodeHandle, const dv_r
 			cameraPtr->deviceConfigSet(DVX_EXTINPUT, DVX_EXTINPUT_DETECT_PULSES, false);
 			cameraPtr->deviceConfigSet(DVX_EXTINPUT, DVX_EXTINPUT_RUN_DETECTOR, mParams.triggers);
 		}
+
+		// Support variable data interval sizes.
+		cameraPtr->deviceConfigSet(CAER_HOST_CONFIG_PACKETS, CAER_HOST_CONFIG_PACKETS_MAX_CONTAINER_INTERVAL, mParams.timeIncrement);
 	}
 	else {
 		playbackServer
