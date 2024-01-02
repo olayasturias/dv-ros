@@ -221,7 +221,7 @@ private:
 	 * @param rsp       Synchronization response.
 	 * @return          Whether synchronization succeeded.
 	 */
-	[[nodiscar]] bool synchronizeCamera(
+	[[nodiscard]] bool synchronizeCamera(
 		dv_ros_capture::SynchronizeCamera::Request &req, dv_ros_capture::SynchronizeCamera::Response &rsp);
 
 	/**

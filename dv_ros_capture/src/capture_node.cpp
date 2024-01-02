@@ -254,7 +254,7 @@ void CaptureNode::populateInfoMsg(const dv::camera::CameraGeometry &cameraGeomet
 
 		default:
 			throw dv::exceptions::InvalidArgument<dv::camera::DistortionModel>(
-				"Unsupported camera distortion model.", cameraGeometry.getDistortionModel());
+				"Unsupported camera distortion model.");
 	}
 
 	auto cx = cameraGeometry.getCentralPoint().x;
